@@ -29,7 +29,7 @@ import {
   gitRepo,
 } from '@openai/agents/sandbox';
 import { UnixLocalSandboxClient } from '@openai/agents/sandbox/local';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installOllamaShim } from './ollama-shim.ts';
@@ -69,48 +69,46 @@ export const SKILL_SOURCES = {
   hostDir: localDir({ src: localSkillsDir }),
   github: gitRepo({
     host: 'github.com',
-    repo: 'openai/openai-agents-js',
+    repo: 'damionrashford/lna',
     ref: 'main',
-    subpath: 'examples/docs/sandbox-agents/skills',
+    subpath: '.agents/skills',
   }),
 };
 
-// Verified agent: INLINE provider + LAZY local-dir provider (sum-writer). The GitHub provider is
-// wired as an alternate lazy source below — lazy means it only clones when load_skill is called.
+// Skills pulled FROM GitHub: damionrashford/lna .agents/skills, cloned on load_skill.
 const agent = new SandboxAgent({
-  name: 'Skill Providers Agent',
+  name: 'GitHub Skills Agent',
   model: MODEL,
   instructions:
-    'List EVERY skill available to you by name (from the injected skill index), one per line, then stop. Do not call any tools.',
-  defaultManifest: new Manifest({ entries: { 'README.md': { type: 'file', content: '# skills demo\n' } } }),
-  // One provider per skills() capability (SDK rule); combine providers by stacking
-  // capabilities with DISTINCT skillsPaths so they don't clobber each other.
+    'Call load_skill on "sum-writer" (served from the lna GitHub repo). After it loads, open its SKILL.md and reply with the description line from the frontmatter, then stop.',
+  defaultManifest: new Manifest({ entries: { 'README.md': { type: 'file', content: '# github skills demo\n' } } }),
   capabilities: [
     shell(),
     filesystem(),
-    skills({ skills: [inlineGreet], skillsPath: '.agents/inline' }), // (1) inline provider
     skills({
-      lazyFrom: { source: SKILL_SOURCES.hostDir, index: [{ name: 'sum-writer', description: 'Write a computed sum to result.txt.' }] },
-      skillsPath: '.agents/local',
-    }), // (2) local-dir provider (lazy)
-    skills({
-      lazyFrom: { source: SKILL_SOURCES.github, index: [{ name: 'invoice-total-fixer', description: 'Fix invoice totals — cloned from GitHub on load_skill.' }] },
+      lazyFrom: {
+        source: SKILL_SOURCES.github,
+        index: [{ name: 'sum-writer', description: 'Compute a sum and write it to result.txt (from the lna repo).' }],
+      },
       skillsPath: '.agents/github',
-    }), // (3) GitHub provider (lazy — clones only on load_skill)
+    }),
   ],
 });
 
 const client = new UnixLocalSandboxClient();
 const session = await client.create(agent.defaultManifest as Manifest);
 const ws = session.state.workspaceRootPath;
-console.log(`model: ${MODEL} · providers wired: inline, local-dir(lazy) + github(alt)\nworkspace: ${ws}\n`);
+console.log(`model: ${MODEL} · skills from github.com/damionrashford/lna .agents/skills\nworkspace: ${ws}\n`);
 
 try {
-  const result = await run(agent, 'What skills do you have?', { sandbox: { session }, maxTurns: 8 });
-  console.log('=== agent sees these skills ===');
+  const result = await run(agent, 'Load the sum-writer skill from GitHub and report its description.', { sandbox: { session }, maxTurns: 8 });
+  console.log('=== agent output ===');
   console.log(result.finalOutput);
-  const agents = await readdir(join(ws, '.agents')).catch(() => []);
-  console.log('\n.agents/ materialized:', agents.length ? agents.join(', ') : '(lazy — nothing until load_skill)');
+  // Prove the GitHub clone landed on disk:
+  const cloned = await readdir(join(ws, '.agents/github')).catch(() => []);
+  console.log('\n.agents/github/ (cloned from GitHub):', cloned.length ? cloned.join(', ') : '(nothing — load_skill not called)');
+  const skillMd = await readFile(join(ws, '.agents/github/sum-writer/SKILL.md'), 'utf8').catch((e) => `not materialized: ${e.message}`);
+  console.log('cloned sum-writer/SKILL.md first line:', skillMd.split('\n').slice(0, 3).join(' | '));
 } finally {
   await Promise.race([session.close?.(), new Promise((r) => setTimeout(r, 8000))]).catch(() => {});
 }
