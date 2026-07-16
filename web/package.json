@@ -16,6 +16,8 @@
     "@openai/agents-extensions": "^0.13.4",
     "@openai/agents-realtime": "^0.13.4",
     "ai": "^7.0.29",
+    "buffer": "^6.0.3",
+    "fflate": "^0.8.2",
     "openai": "^6.47.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

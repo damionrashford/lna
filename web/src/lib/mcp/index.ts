@@ -42,9 +42,11 @@ async function connectEntry(e: Entry) {
   syncMcpView();
 }
 
-export function addMcpServer(label: string, transport: "http" | "stdio", target: string, auth: string) {
+export function addMcpServer(label: string, transport: "http" | "stdio" | "inpage", target: string, auth: string) {
   const cfg: McpServerConfig = transport === "http"
     ? { label, transport, url: target, auth: auth || undefined }
+    : transport === "inpage"
+    ? { label, transport, server: target || label } // target = registered in-page server name (e.g. "browser")
     : { label, transport, cmd: target, bridge: "ws://127.0.0.1:7967/ws" };
   const e: Entry = { cfg, server: null, connected: false, error: null, tools: 0 };
   entries.push(e); save(); syncMcpView(); connectEntry(e);

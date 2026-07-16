@@ -10,6 +10,26 @@ import tailwind from "bun-plugin-tailwind";
 import { reactCompiler } from "./react-compiler-plugin";
 import { cp } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+// Alias the Node builtins that a bundled in-page stdio MCP server imports (e.g. the MCP SDK's
+// StdioServerTransport → `import process from "node:process"`) to our browser shims, so such servers
+// bundle + run in the page. Inert for the rest of the app (nothing else imports node: builtins).
+const shimsDir = join(dirname(fileURLToPath(import.meta.url)), "src/lib/mcp/shims");
+const NODE_SHIMS: Record<string, string> = {
+  "node:process": "process.ts", "node:fs": "fs.ts", "node:fs/promises": "fs-promises.ts",
+  "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "zlib.ts",
+};
+const nodeShimPlugin = {
+  name: "node-shims",
+  setup(build: any) {
+    build.onResolve({ filter: /^node:(process|fs|fs\/promises|crypto|url|zlib)$/ }, (args: any) => {
+      const file = NODE_SHIMS[args.path];
+      return file ? { path: join(shimsDir, file) } : undefined;
+    });
+  },
+};
 
 function repoSlug(): { owner: string; repo: string } | null {
   const fromEnv = Bun.env.GITHUB_REPOSITORY; // "owner/repo" in Actions
@@ -55,7 +75,7 @@ const result = await Bun.build({
   minify: true,
   sourcemap: "linked",
   publicPath: base,
-  plugins: [reactCompiler, tailwind],
+  plugins: [reactCompiler, tailwind, nodeShimPlugin],
 });
 if (!result.success) {
   for (const log of result.logs) console.error(log);

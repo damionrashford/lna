@@ -26,7 +26,7 @@ export default function Settings() {
   const [repoSpec, setRepoSpec] = useState("");
   const [snapName, setSnapName] = useState("");
   const [mcpLabel, setMcpLabel] = useState("");
-  const [mcpTransport, setMcpTransport] = useState<"http" | "stdio">("http");
+  const [mcpTransport, setMcpTransport] = useState<"http" | "stdio" | "inpage">("http");
   const [mcpTarget, setMcpTarget] = useState("");
   const [mcpAuth, setMcpAuth] = useState("");
 
@@ -150,8 +150,8 @@ export default function Settings() {
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               <input placeholder="label" style={{ width: 78 }} value={mcpLabel} onChange={(e) => setMcpLabel(e.target.value)} />
-              <select style={{ width: 78 }} value={mcpTransport} onChange={(e) => setMcpTransport(e.target.value as "http" | "stdio")}><option value="http">HTTP</option><option value="stdio">stdio</option></select>
-              <input placeholder="https://…/mcp   or   npx -y @modelcontextprotocol/server-everything" style={{ flex: 1, minWidth: 160 }} value={mcpTarget} onChange={(e) => setMcpTarget(e.target.value)} />
+              <select style={{ width: 78 }} value={mcpTransport} onChange={(e) => setMcpTransport(e.target.value as "http" | "stdio" | "inpage")}><option value="http">HTTP</option><option value="stdio">stdio</option><option value="inpage">in-page</option></select>
+              <input placeholder={mcpTransport === "inpage" ? "in-page server name (e.g. browser)" : "https://…/mcp   or   npx -y @modelcontextprotocol/server-everything"} style={{ flex: 1, minWidth: 160 }} value={mcpTarget} onChange={(e) => setMcpTarget(e.target.value)} />
               <button onClick={() => { if (!mcpTarget.trim()) return; addMcpServer((mcpLabel || "mcp").trim().replace(/[^a-zA-Z0-9_-]/g, "_"), mcpTransport, mcpTarget.trim(), mcpAuth.trim()); setMcpLabel(""); setMcpTarget(""); setMcpAuth(""); }} style={{ background: "var(--coral)", color: "var(--coral-ink)", border: "none", borderRadius: "var(--r-sm)", padding: "0 15px", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer" }}>Add</button>
             </div>
             <input placeholder="auth token (optional, for HTTP servers)" style={{ marginTop: 6, width: "100%" }} value={mcpAuth} onChange={(e) => setMcpAuth(e.target.value)} />

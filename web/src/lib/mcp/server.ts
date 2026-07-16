@@ -17,6 +17,7 @@ import { authFrame } from "../net/handshake";
 import { requestElicitation } from "../hitl/approvals";
 import { currentRoots } from "../sandbox/roots";
 import { S, logEvent, updateTask } from "../../store";
+import { InPageStdioTransport } from "./inpage";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -72,9 +73,10 @@ class BridgeStdioTransport {
 
 export interface McpServerConfig {
   label: string;
-  transport: "http" | "stdio";
+  transport: "http" | "stdio" | "inpage";
   url?: string;
   cmd?: string;
+  server?: string;   // inpage: the registered in-page server name (see mcp/inpage.ts)
   bridge?: string;
   token?: string;
   auth?: string;
@@ -148,6 +150,10 @@ export function makeMcpServer(cfg: McpServerConfig): SdkMcpServer {
         fetch: ((u: any, init: any) => localFetch(String(u), init)) as any, // LNA-hinted fetch
         requestInit: { headers: { ...(cfg.headers || {}), ...(auth ? { Authorization: auth } : {}) } },
       } as any));
+  }
+  if (cfg.transport === "inpage") {
+    // PURE-BROWSER path — a bundled stdio MCP server runs in the page over shimmed process stdio.
+    return new SdkMcpServer(cfg, () => new InPageStdioTransport(cfg.server || cfg.label));
   }
   return new SdkMcpServer(cfg, () =>
     new BridgeStdioTransport(cfg.bridge || "ws://127.0.0.1:7967/ws", cfg.token || S.bridgeToken, cfg.cmd || ""));
