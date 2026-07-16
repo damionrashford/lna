@@ -9,6 +9,8 @@ import { tool } from "@openai/agents";
 import { z } from "zod";
 import { S } from "../../store";
 import { noSecretsToWeb, redactToolSecrets } from "../runtime/guardrails";
+import { rerank } from "@automo/inference";
+import { logEvent } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -106,9 +108,50 @@ export const webSearchTool = tool({
     ];
     for (const [url, parse] of sources) {
       const html = await fetchPage(url, session);
-      const res = parse(html, max_results);
-      if (res.length) return JSON.stringify(res);
+      let res = parse(html, Math.max(max_results, 10)); // over-fetch so rerank has candidates to reorder
+      if (res.length) { res = await rerankResults(query, res, max_results); return JSON.stringify(res); }
     }
     return `No results for "${query}" — DuckDuckGo or the CORS proxies may be rate-limiting scraping right now. Try again shortly, or run the local bridge so search can go through your own machine.`;
+  },
+});
+
+// Reorder + dedupe search hits by semantic relevance to the query (in-browser embeddings). Best-effort:
+// if the embedder dep isn't installed or errors, return the raw DDG order untouched.
+async function rerankResults(query: string, results: SearchResult[], topK: number): Promise<SearchResult[]> {
+  try {
+    const docs = results.map((r) => `${r.title}. ${r.snippet}`);
+    const ranked = await rerank(query, docs, topK);
+    return ranked.map((r) => results[r.index]);
+  } catch {
+    return results.slice(0, topK); // no embedder → raw order
+  }
+}
+
+const shqRead = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+
+export const readUrlTool = tool({
+  name: "read_url",
+  description: "Fetch a web page and return its readable text (HTML stripped). Give `focus` (what you're looking for) and an in-browser embedding model keeps only the most relevant passages of long pages.",
+  parameters: z.object({
+    url: z.string().describe("full http(s) URL to read"),
+    focus: z.string().describe("what you want from this page — used to rank passages"),
+  }),
+  needsApproval: async () => S.approve,
+  outputGuardrails: [redactToolSecrets],
+  execute: async ({ url, focus }, runContext?: any) => {
+    const session = runContext?.context?.session ?? null;
+    let html = await fetchPage(url, session);
+    if (!html && session) { try { const r = await session.exec({ cmd: `curl -sL --max-time 20 --compressed -A ${shqRead(UA)} ${shqRead(url)}` }); html = (r?.stdout ?? r?.output ?? "") as string; } catch { /* give up */ } }
+    const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+    if (!text) return "(no readable text extracted)";
+    if (text.length <= 4000) return text;
+    // long page: chunk + keep the passages most relevant to focus (raw first-4k on embedder failure)
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += 1200) chunks.push(text.slice(i, i + 1200));
+    try {
+      const ranked = await rerank(focus, chunks, 4);
+      const top = ranked.sort((a, b) => a.index - b.index).map((r) => chunks[r.index]);
+      return `(most relevant passages for "${focus}")\n\n` + top.join("\n…\n");
+    } catch { logEvent("info", "read_url: no embedder, returning first 4k chars"); return text.slice(0, 4000); }
   },
 });

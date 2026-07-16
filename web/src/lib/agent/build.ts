@@ -4,7 +4,7 @@ import { Manifest, SandboxAgent, shell, filesystem, skills, memory, compaction, 
 import { S } from "../../store";
 import type { AutomoContext } from "../runtime/context";
 import { activeMcpServers } from "../mcp/index";
-import { webSearchTool } from "../tools/search";
+import { webSearchTool, readUrlTool } from "../tools/search";
 import { agentInputGuardrails, agentOutputGuardrails } from "../runtime/guardrails";
 
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser, connected to their own machine over Local Network Access. You operate a real Unix sandbox on their machine:
@@ -33,7 +33,7 @@ export function buildAgent(modelOverride?: string): SandboxAgent<AutomoContext> 
     model,
     instructions: (rc) => buildInstructions(rc.context),
     defaultManifest: new Manifest({ entries: {} }),
-    tools: [webSearchTool],
+    tools: [webSearchTool, readUrlTool],
     // connected MCP servers become the agent's tools (SDK owns exposure); server-prefixed names avoid
     // collisions across servers. This is the real fix for the previously orphaned MCP tool path.
     mcpServers: activeMcpServers(),
