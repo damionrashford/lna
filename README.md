@@ -1,41 +1,72 @@
-# LNA — the complete Local Network Access surface
+# AUTOMO — a local-first browser AI agent
 
-A single-page reference covering the entire [Local Network Access](https://wicg.github.io/local-network-access/) (LNA) surface in one reading order:
+**Live:** https://damionrashford.github.io/lna/
 
-1. **Threat model** — drive-by pharming, router CSRF, localhost server abuse, why CORS doesn't help
-2. **Address spaces** — `public` / `local` / `loopback`, the *less public* ordering, and the full non-public IP block table
-3. **Permission model** — `local-network`, `loopback-network`, the `local-network-access` alias, secure contexts, Permissions-Policy delegation, CSP `treat-as-public-address`
-4. **API surface** — `fetch()` `targetAddressSpace`, mixed-content exemptions, Permissions API, WebSockets / WebTransport / workers / HTTP cache behavior
-5. **Limits & caveats** — DNS rebinding, cross-network confusion, local attackers, proxies, cache probing
-6. **Timeline** — Chrome 138 flag → 139+ origin trial & enterprise policy → 142 prompt launch
-7. **Prepare** — an 8-step migration checklist
+AUTOMO is a static web page that *is* an AI agent. It runs in your browser but thinks on **your** machine: a public HTTPS page, with one user-granted **[Local Network Access](https://wicg.github.io/local-network-access/)** (LNA) permission, reaches `localhost` to drive your own model, files, shell, and MCP tools. Hosted UI, local everything else — nothing leaves your machine.
 
-**Live site:** https://damionrashford.github.io/lna/
-**Test platform:** https://damionrashford.github.io/lna/test.html
-**stdio bridge + MCP:** https://damionrashford.github.io/lna/bridge.html
+It's a real **[`@openai/agents`](https://openai.github.io/openai-agents-js/) SandboxAgent**, running in the browser — not a reimplementation. Inference hits your local model's Responses API over LNA; the sandbox (shell, filesystem/`apply_patch`, skills, memory, compaction) is the SDK's, hosted on your machine by a small daemon and reached over LNA.
 
-## The stdio bridge (HTTP/WS ⇄ stdin/stdout)
+> The repo is named `lna` for historical reasons — it started as a Local Network Access reference.
 
-`bridge-server.ts` is a local daemon that spawns a process and pipes its stdin/stdout/stderr over WebSocket. Because LNA lets a **public** page open a socket to `127.0.0.1`, a hosted page can drive a local shell — or a **stdio MCP server** — through it. `bridge.html` is the browser side: a terminal plus a full MCP client (`initialize` → `tools/list` → `tools/call`, protocol `2025-11-25`).
+## How it fits together
 
-```bash
-BRIDGE_TOKEN=dev bun servers/bridge.ts   # 127.0.0.1:7967, token + command allowlist
+```
+Browser (GitHub Pages, static)                 Your machine
+┌─────────────────────────────┐                ┌──────────────────────────────┐
+│ AUTOMO  (React + Tailwind)   │                │ Ollama  /v1/responses         │
+│  @openai/agents SandboxAgent │──── LNA ──────▶│  (model, streaming)           │
+│  run(agent,{ sandbox,stream })│                │                              │
+│                              │                │ bridge (servers/bridge.ts)    │
+│  BrowserSandboxClient ───────┼──── LNA (WS) ─▶│  hosts UnixLocalSandboxClient │
+│   proxies every session call │                │  → real shell, apply_patch,   │
+└─────────────────────────────┘                │    materialize, snapshots     │
+                                                └──────────────────────────────┘
 ```
 
-Verified against `@modelcontextprotocol/server-everything`: handshake, 13 tools listed, `echo` called — all from a browser page over the LNA-gated socket. The token handshake + command allowlist exist because a spawn endpoint reachable from a public origin is otherwise remote code execution — keep the token secret if you front it with a tunnel.
+- **Model** — local Ollama over the **Responses API**, streaming. A shim subclasses the SDK's `OpenAIResponsesModel` with a name containing `ChatCompletions` so `apply_patch` + structured tools register as ordinary function tools (which Ollama's Responses endpoint supports), while inference still hits `/v1/responses`.
+- **Sandbox** — `BrowserSandboxClient` implements the SDK's `SandboxClient`/`SandboxSession`/`Editor` as a thin WebSocket proxy. Every session call (`exec`, `apply_patch` via the editor, `readFile`, `listDir`, `materializeEntry`, `persistWorkspace`/`hydrateWorkspace`) is forwarded to the bridge, which runs the SDK's **`UnixLocalSandboxClient`** — real processes, real diffs, real snapshots.
+- **Capabilities** — the SDK's `shell`, `filesystem`, `skills` (lazy from a GitHub repo), `memory`, `compaction`.
+- **Also** — vision (image understanding) + image generation as direct Responses calls, multi-conversation sessions (IndexedDB), workspace snapshots, and MCP (Streamable HTTP directly; stdio through the bridge).
 
-## Local testing
+## The bridge (`servers/bridge.ts`)
 
-LNA only fires when the page is a **public** origin and the fetch target is local/loopback. Opened from `localhost` the page is itself loopback, so nothing triggers. To test:
+The only local process. One WebSocket on `127.0.0.1:7967` carries two channels: the **sandbox RPC** (hosts `UnixLocalSandboxClient`) and a **stdio pipe** (for stdio MCP servers).
 
-1. Enable enforcement: `chrome://flags/#local-network-access-check` → **Enabled (Blocking)** (Chrome 138–141; 142+ enforces by default).
-2. Run the daemon: `(removed)` → serves `127.0.0.1:7966` (CORS JSON + WebSocket echo).
-3. Open the **public** test platform (the GitHub Pages URL above, or a tunnel that fronts your local build) and run the suite. Grant the prompt to watch verdicts flip.
+```bash
+bun run bridge   # BRIDGE_TOKEN=dev bun servers/bridge.ts → 127.0.0.1:7967
+```
+
+Chat-only works without it; shell / filesystem / skills / memory need it. It spawns processes and runs a real shell, so a public page reaching it is remote code execution — gates: a token handshake before any op, a spawn allowlist, and it's bound to `127.0.0.1`. The sandbox `exec` is deliberately not allowlisted (it *is* the agent's shell), so **the token is the whole perimeter** — keep it secret if you ever front it with a tunnel.
+
+## Connecting (once, on the machine)
+
+1. **LNA prompt** — open the page, click **Connect**, grant Chrome's local-network prompt (Chrome ≥142, or `chrome://flags/#local-network-access-check` on 138–141).
+2. **CORS** — let Ollama accept the origin: `OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve` (macOS app: `launchctl setenv OLLAMA_ORIGINS '…'` then restart). AUTOMO diagnoses this exactly — a no-cors probe tells "running but blocked" apart from "down".
+3. **A model** — pull one; AUTOMO can trigger `/api/pull` from the browser.
+
+## Develop
+
+```bash
+bun install                    # in web/
+bun run --cwd web dev          # Bun fullstack dev server (HMR)  → localhost:3000
+bun run bridge                 # the sandbox host, in another terminal
+bun run --cwd web build        # React Compiler + Tailwind → static web/dist (publicPath /lna/)
+```
+
+`web/` is React + Tailwind, compiled by the **React Compiler** (a Babel pass wired into `build.ts`, since Bun's transpiler doesn't run Babel) and bundled by `bun build` to static assets. Node-only `@openai/agents/sandbox/local` is imported **only** in the bridge; the browser bundles `@openai/agents` core + `@openai/agents/sandbox`.
+
+## Deploy
+
+Push to `main` under `web/**` → `.github/workflows/pages.yml` runs `bun install && bun run build` and publishes `web/dist` to Pages.
+
+## Verified
+
+End-to-end against a local bridge + Ollama (`gpt-oss:20b`): the in-browser SandboxAgent streamed `reasoning → exec_command → apply_patch → message`, wrote the answer to a real file in its sandbox, and read it back — `result.txt: 59`.
 
 ## Sources
 
-- [WICG Local Network Access spec](https://wicg.github.io/local-network-access/) (Draft CG Report, 18 Jun 2026)
-- [Chrome blog: New permission prompt for Local Network Access](https://developer.chrome.com/blog/local-network-access)
-- [MDN: Local network access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access) + `Request.targetAddressSpace` and Permissions-Policy reference pages
+- [WICG Local Network Access spec](https://wicg.github.io/local-network-access/)
+- [Chrome: New permission prompt for Local Network Access](https://developer.chrome.com/blog/local-network-access)
+- [MDN: Local network access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access) · [OpenAI Agents JS](https://openai.github.io/openai-agents-js/)
 
-Unofficial reference — not affiliated with Google or Mozilla. Static site, no build step: `index.html` is everything.
+Unofficial, not affiliated with Google, Mozilla, or OpenAI.

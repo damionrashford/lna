@@ -1,0 +1,21 @@
+{
+  "name": "AUTOMO — local-first browser AI agent",
+  "short_name": "AUTOMO",
+  "description": "A local-first AI agent that runs in your browser and talks to the model, files, and shell on your own machine over Local Network Access.",
+  "id": "__BASE__",
+  "start_url": "__BASE__",
+  "scope": "__BASE__",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14131a",
+  "theme_color": "#14131a",
+  "categories": ["productivity", "developer", "utilities"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "icons": [
+    { "src": "__BASE__favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "__BASE__icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "__BASE__icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "__BASE__icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}
