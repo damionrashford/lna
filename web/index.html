@@ -128,6 +128,22 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .send:disabled svg{stroke:var(--muted)}
 .hint{text-align:center;font-size:0.7rem;color:var(--muted);margin-top:9px}
 .hint a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+/* multimodal */
+.bubble img.att,.bubble img.gen{display:block;max-width:min(340px,100%);border-radius:12px}
+.bubble img.att{margin-bottom:8px}
+.msg.user .bubble img.att{margin-left:auto}
+.bubble.genwrap{padding:6px;background:var(--surface)}
+.bubble .imgcap{font-size:0.72rem;color:var(--muted);margin-top:7px;padding:0 4px 2px}
+.cbtn{width:40px;height:40px;border-radius:11px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;flex-shrink:0;transition:.15s}
+.cbtn:hover{border-color:var(--border-hi)}
+.cbtn svg{width:18px;height:18px;stroke:var(--ink-mid);fill:none;stroke-width:1.9}
+.cbtn.on{background:var(--coral);border-color:var(--coral)}
+.cbtn.on svg{stroke:var(--coral-ink);fill:var(--coral-ink)}
+.attach-strip{display:flex;gap:8px;padding:0 6px 10px;flex-wrap:wrap}
+.attach-strip:empty{display:none}
+.thumb{position:relative;width:54px;height:54px;border-radius:10px;overflow:hidden;border:1px solid var(--border-hi)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb .x{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:oklch(14% 0.01 275 / 0.82);color:var(--ink);border:none;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
 
 /* settings drawer */
 .scrim{position:fixed;inset:0;background:oklch(10% 0.01 275 / 0.6);backdrop-filter:blur(3px);opacity:0;
@@ -201,10 +217,14 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 </main>
 
 <section class="composer" id="composer" style="display:none">
+  <div class="attach-strip" id="attach-strip"></div>
   <div class="inputwrap">
+    <button class="cbtn" id="attach-btn" title="Attach an image (understanding)" aria-label="Attach image"><svg viewBox="0 0 24 24"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7L14 5.5a3.3 3.3 0 014.6 4.7l-9 9a1.6 1.6 0 01-2.3-2.3l8.5-8.5"/></svg></button>
+    <button class="cbtn" id="imgmode-btn" title="Image generation mode" aria-label="Image mode"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></button>
     <textarea id="input" rows="1" placeholder="Ask anything…" autocomplete="off"></textarea>
     <button class="send" id="send" disabled aria-label="Send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
   </div>
+  <input type="file" id="file-input" accept="image/*" hidden>
   <div class="hint">Your model · your machine · <span id="model-hint">—</span> · <a href="#" id="disconnect">disconnect</a></div>
 </section>
 
@@ -216,8 +236,14 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
     <div class="field"><label>Model endpoint (Ollama)</label>
       <input id="set-url" type="text" spellcheck="false" value="http://localhost:11434">
       <div class="note">Loopback address on your machine. Reached over LNA — Chrome prompts once, then remembers.</div></div>
-    <div class="field"><label>Model</label>
+    <div class="field"><label>Chat model</label>
       <select id="set-model"><option value="">— connect to load models —</option></select></div>
+    <div class="field"><label>Vision model (image understanding)</label>
+      <select id="set-vision"><option value="">— none —</option></select>
+      <div class="note">Used when you attach an image. Needs a vision model (e.g. a <code>-vl</code> / llava model).</div></div>
+    <div class="field"><label>Image model (generation)</label>
+      <select id="set-image"><option value="">— none —</option></select>
+      <div class="note">Used in image mode (the ✦ button). Needs a diffusion model (e.g. flux).</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
@@ -239,6 +265,10 @@ const store = {
   set url(v){ localStorage.setItem('automo.url', v); },
   get model(){ return localStorage.getItem('automo.model') || ''; },
   set model(v){ localStorage.setItem('automo.model', v); },
+  get vision(){ return localStorage.getItem('automo.vision') || ''; },
+  set vision(v){ localStorage.setItem('automo.vision', v); },
+  get image(){ return localStorage.getItem('automo.image') || ''; },
+  set image(v){ localStorage.setItem('automo.image', v); },
   get chat(){ try{ return JSON.parse(localStorage.getItem('automo.chat')||'[]'); }catch{ return []; } },
   set chat(v){ localStorage.setItem('automo.chat', JSON.stringify(v.slice(-100))); },
 };
@@ -258,6 +288,12 @@ function setStatus(state, text) {
   $('#status-text').textContent = text;
 }
 function setCap(id, dot, text) { $('#cap-' + id).textContent = text; $('#cap-' + id + '-dot').className = 'dot ' + dot; }
+function fillSelect(sel, items, prefer, emptyLabel) {
+  const el = $(sel);
+  const opts = items.map((m) => `<option value="${m}">${m}</option>`);
+  el.innerHTML = (emptyLabel && !items.length ? `<option value="">${emptyLabel}</option>` : '') + opts.join('') || `<option value="">${emptyLabel||'—'}</option>`;
+  el.value = items.includes(prefer) ? prefer : (items[0] || '');
+}
 
 // ---- onboarding copy: fill live origin ----
 $('#cmd-ollama-t').textContent = `OLLAMA_ORIGINS='${location.origin}' ollama serve`;
@@ -280,11 +316,13 @@ async function connect() {
     const data = await res.json();
     const models = (data.models || []).map((m) => m.name);
     if (!models.length) { showDiag('no-model'); return failConnect(); }
-    // populate model picker
-    const sel = $('#set-model');
-    sel.innerHTML = models.map((m) => `<option value="${m}">${m}</option>`).join('');
-    sel.value = models.includes(store.model) ? store.model : models[0];
-    store.model = sel.value;
+    // categorize by name heuristic → chat / vision / image
+    const image = models.filter((m) => /flux|stable|sdxl|\bsd\d|diffus|image-?gen|dalle/i.test(m));
+    const vision = models.filter((m) => /vl\b|-vl|vision|llava|multimodal|moondream/i.test(m));
+    const chat = models.filter((m) => !image.includes(m));
+    fillSelect('#set-model', chat, store.model);         store.model = $('#set-model').value;
+    fillSelect('#set-vision', vision, store.vision, '— none —'); store.vision = $('#set-vision').value;
+    fillSelect('#set-image', image, store.image, '— none —');   store.image = $('#set-image').value;
     onConnected(models);
   } catch (err) {
     const ms = Math.round(performance.now() - t0);
@@ -358,31 +396,41 @@ function bubble(role, content, opts = {}) {
 function scrollDown() { const m = $('#main'); m.scrollTop = m.scrollHeight; }
 
 let streaming = false;
+let attached = null;   // data URL of an image to understand
+let imageMode = false; // ✦ generate-an-image mode
+
+// text + vision chat (Responses API, streaming). Vision = attach an image → input_image parts.
 async function send() {
   const input = $('#input'); const text = input.value.trim();
-  if (!text || streaming) return;
+  if (streaming) return;
+  if (imageMode) { if (text) generateImage(text); return; }
+  if (!text && !attached) return;
   input.value = ''; autosize(); $('#send').disabled = true; streaming = true;
 
-  messages.push({ role: 'user', content: text });
-  $('#thread').appendChild(bubble('user', text)); scrollDown();
+  const img = attached; clearAttachment();
+  const uEl = bubble('user', text);
+  if (img) { const im = document.createElement('img'); im.className = 'att'; im.src = img; uEl._bubble.prepend(im); }
+  $('#thread').appendChild(uEl); scrollDown();
+
+  const model = img ? (store.vision || store.model) : store.model;
+  const current = img
+    ? { role: 'user', content: [{ type: 'input_text', text: text || 'Describe this image.' }, { type: 'input_image', image_url: img }] }
+    : { role: 'user', content: text };
+  const input_arr = [...messages.map(({role,content}) => ({role,content})), current];
+  messages.push({ role: 'user', content: img ? (text ? text + ' [image]' : '[image]') : text }); // persist text only, not base64
 
   const botEl = bubble('assistant', '');
   const cursor = document.createElement('span'); cursor.className = 'cursor';
-  botEl._bubble.appendChild(cursor);
-  $('#thread').appendChild(botEl); scrollDown();
+  botEl._bubble.appendChild(cursor); $('#thread').appendChild(botEl); scrollDown();
 
   let acc = '';
   try {
-    // OpenAI Responses API (/v1/responses) — Ollama serves it (0.13.3+). Non-stateful:
-    // we pass the whole conversation as `input` each turn (no previous_response_id).
     const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/responses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: store.model, stream: true, input: messages.map(({role,content}) => ({role,content})) }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: true, input: input_arr }),
     });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
-    let thinking = false;
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let thinking = false;
     for (;;) {
       const { value, done } = await reader.read(); if (done) break;
       buf += dec.decode(value, { stream: true });
@@ -406,17 +454,54 @@ async function send() {
     }
     cursor.remove(); botEl._bubble.classList.remove('thinking');
     if (!acc) botEl._bubble.textContent = '(empty response)';
-    messages.push({ role: 'assistant', content: acc });
-    store.chat = messages;
+    messages.push({ role: 'assistant', content: acc }); store.chat = messages;
   } catch (err) {
-    cursor.remove();
-    botEl._bubble.classList.add('err');
+    cursor.remove(); botEl._bubble.classList.add('err');
     botEl._bubble.textContent = `Couldn't reach the model (${err.message}). Check the connection in settings.`;
     setStatus('err', 'connection lost');
-  } finally {
-    streaming = false; $('#send').disabled = false; $('#input').focus();
-  }
+  } finally { streaming = false; $('#send').disabled = false; $('#input').focus(); }
 }
+
+// image generation (/v1/images/generations, e.g. flux) → render the image in a bubble.
+async function generateImage(prompt) {
+  $('#input').value = ''; autosize(); $('#send').disabled = true; streaming = true;
+  $('#thread').appendChild(bubble('user', prompt)); scrollDown();
+  messages.push({ role: 'user', content: prompt });
+  const botEl = bubble('assistant', ''); botEl._bubble.classList.add('thinking'); botEl._bubble.textContent = 'generating…';
+  const cursor = document.createElement('span'); cursor.className = 'cursor'; botEl._bubble.appendChild(cursor);
+  $('#thread').appendChild(botEl); scrollDown();
+  try {
+    if (!store.image) throw new Error('pick an image model in settings');
+    const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/images/generations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: store.image, prompt, size: '512x512', response_format: 'b64_json' }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const b64 = (await res.json()).data?.[0]?.b64_json;
+    if (!b64) throw new Error('no image returned');
+    botEl._bubble.classList.remove('thinking'); botEl._bubble.classList.add('genwrap'); botEl._bubble.textContent = '';
+    const im = document.createElement('img'); im.className = 'gen'; im.src = 'data:image/png;base64,' + b64;
+    const cap = document.createElement('div'); cap.className = 'imgcap'; cap.textContent = `${store.image} · "${prompt}"`;
+    botEl._bubble.append(im, cap);
+    messages.push({ role: 'assistant', content: `[generated image: ${prompt}]` }); store.chat = messages; scrollDown();
+  } catch (err) {
+    botEl._bubble.classList.remove('thinking'); botEl._bubble.classList.add('err');
+    botEl._bubble.textContent = `Image generation failed (${err.message}).`;
+  } finally { streaming = false; $('#send').disabled = false; $('#input').focus(); }
+}
+
+// ---- attachments (image understanding) ----
+function renderAttach() {
+  const s = $('#attach-strip'); s.innerHTML = '';
+  if (!attached) return;
+  const t = document.createElement('div'); t.className = 'thumb';
+  const im = document.createElement('img'); im.src = attached;
+  const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.onclick = clearAttachment;
+  t.append(im, x); s.appendChild(t);
+}
+function clearAttachment() { attached = null; renderAttach(); }
+function setImage(dataUrl) { if (imageMode) { imageMode = false; $('#imgmode-btn').classList.remove('on'); $('#input').placeholder = 'Ask anything…'; } attached = dataUrl; renderAttach(); $('#input').focus(); }
+function fileToDataURL(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
 
 // ---- input UX ----
 function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, 180) + 'px'; }
@@ -425,6 +510,20 @@ $('#input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shi
 $('#send').addEventListener('click', send);
 $('#connect-btn').addEventListener('click', connect);
 $('#disconnect').addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
+
+// ---- multimodal controls ----
+$('#attach-btn').addEventListener('click', () => $('#file-input').click());
+$('#file-input').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) setImage(await fileToDataURL(f)); e.target.value = ''; });
+$('#imgmode-btn').addEventListener('click', () => {
+  imageMode = !imageMode; $('#imgmode-btn').classList.toggle('on', imageMode);
+  if (imageMode) clearAttachment();
+  $('#input').placeholder = imageMode ? 'Describe an image to generate…' : 'Ask anything…';
+  $('#input').focus();
+});
+window.addEventListener('paste', async (e) => { if (!connected) return; const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/')); if (it) setImage(await fileToDataURL(it.getAsFile())); });
+const cw = $('#composer');
+cw.addEventListener('dragover', (e) => e.preventDefault());
+cw.addEventListener('drop', async (e) => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/')); if (f) setImage(await fileToDataURL(f)); });
 
 // ---- new / clear ----
 $('#new-btn').addEventListener('click', () => { messages = []; store.chat = []; renderThread(); $('#input').focus(); });
@@ -439,6 +538,8 @@ $('#scrim').addEventListener('click', closeSettings);
 $('#set-url').value = store.url;
 $('#set-url').addEventListener('change', (e) => { store.url = e.target.value.trim(); });
 $('#set-model').addEventListener('change', (e) => { store.model = e.target.value; $('#model-hint').textContent = e.target.value; });
+$('#set-vision').addEventListener('change', (e) => { store.vision = e.target.value; });
+$('#set-image').addEventListener('change', (e) => { store.image = e.target.value; });
 
 // ---- boot ----
 setStatus('', 'not connected');
