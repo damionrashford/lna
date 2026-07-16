@@ -16,8 +16,7 @@ let embedderPromise: Promise<Embedder> | null = null;
 export async function getEmbedder(model = "Xenova/all-MiniLM-L6-v2"): Promise<Embedder> {
   if (embedderPromise) return embedderPromise;
   embedderPromise = (async () => {
-    const spec = "@huggingface/transformers";
-    const tf: any = await import(/* @vite-ignore */ spec).catch(() => {
+    const tf: any = await import("@huggingface/transformers").catch(() => {
       throw new Error("Semantic rerank needs `@huggingface/transformers` — add it to embed in the browser.");
     });
     const device = (navigator as any).gpu ? "webgpu" : "wasm";

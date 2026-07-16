@@ -14,8 +14,8 @@ export interface BrowserEngine {
 }
 
 export async function createBrowserEngine(model: string, dtype = "q4f16"): Promise<BrowserEngine> {
-  const spec = "@huggingface/transformers"; // variable specifier ⇒ not resolved at bundle time
-  const tf: any = await import(/* @vite-ignore */ spec).catch(() => {
+  // literal specifier so Bun BUNDLES it when installed; build.ts externalizes it when it's absent
+  const tf: any = await import("@huggingface/transformers").catch(() => {
     throw new Error("In-browser engine needs `@huggingface/transformers` — add it to run models on WebGPU/WASM.");
   });
   const device = (navigator as any).gpu ? "webgpu" : "wasm";

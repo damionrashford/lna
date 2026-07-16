@@ -48,12 +48,10 @@ function makeGitFs(FS: any) {
 
 // Clone `url` into `dir` (a path in the Pyodide FS), shallow + single-branch, then persist to OPFS.
 export async function gitClone(pyodide: any, url: string, dir: string, ref?: string): Promise<void> {
-  const gitMod = "isomorphic-git";
-  const httpMod = "isomorphic-git/http/web";
-  const git: any = (await import(/* @vite-ignore */ gitMod).catch(() => {
+  const git: any = (await import("isomorphic-git").catch(() => {
     throw new Error("In-browser git needs `isomorphic-git` — add it to clone repos in the page.");
   })).default;
-  const http: any = (await import(/* @vite-ignore */ httpMod)).default;
+  const http: any = (await import("isomorphic-git/http/web")).default;
   await git.clone({ fs: makeGitFs(pyodide.FS), http, dir, url, ref, corsProxy: CORS_PROXY, singleBranch: true, depth: 1 });
   await persist();
 }

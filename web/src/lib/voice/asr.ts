@@ -14,8 +14,7 @@ export interface Stt {
 }
 
 export async function createStt(modelId = "onnx-community/whisper-base.en", dtype = "q8"): Promise<Stt> {
-  const spec = "@huggingface/transformers"; // variable specifier ⇒ not resolved at bundle time
-  const tf: any = await import(/* @vite-ignore */ spec).catch(() => {
+  const tf: any = await import("@huggingface/transformers").catch(() => {
     throw new Error("Voice STT needs `@huggingface/transformers` — add it to run Whisper in the browser.");
   });
   const device = (navigator as any).gpu ? "webgpu" : "wasm";

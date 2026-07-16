@@ -27,8 +27,7 @@ export const webllmVramMB = (id: string): number | undefined => MODEL_META[id]?.
 export const webllmRequiresF16 = (id: string): boolean => Boolean(MODEL_META[id]?.f16);
 
 export async function createWebllmEngine(model: string, onProgress?: (pct: number) => void): Promise<BrowserEngine> {
-  const spec = "@mlc-ai/web-llm";
-  const webllm: any = await import(/* @vite-ignore */ spec).catch(() => {
+  const webllm: any = await import("@mlc-ai/web-llm").catch(() => {
     throw new Error("In-browser chat via web-llm needs `@mlc-ai/web-llm` — add it to run MLC models on WebGPU.");
   });
   const engine = await webllm.CreateMLCEngine(model, {

@@ -15,8 +15,7 @@ let dbPromise: Promise<any> | null = null;
 export async function getDb(): Promise<any> {
   if (dbPromise) return dbPromise;
   dbPromise = (async () => {
-    const spec = "sql.js";
-    const initSqlJs: any = (await import(/* @vite-ignore */ spec).catch(() => {
+    const initSqlJs: any = (await import("sql.js").catch(() => {
       throw new Error("SQL store needs `sql.js` — add it to use SQLite in the browser.");
     })).default;
     const SQL = await initSqlJs({ locateFile: (f: string) => SQL_DIST + f });

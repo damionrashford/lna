@@ -86,9 +86,11 @@ const proc: any = {
   umask: () => 0, binding: () => ({}), features: {},
 };
 
-// Some deps reference the bare global `process` (not an import) — expose it.
-(globalThis as any).process = (globalThis as any).process ?? proc;
-(globalThis as any).global = (globalThis as any).global ?? globalThis;
+// NOTE: we deliberately do NOT set globalThis.process. Pyodide and transformers.js detect Node vs
+// browser via `typeof process !== "undefined" && process.versions?.node`; installing a node-shaped
+// global process makes them take the Node path and `import("node:url")` etc., which fails in the browser.
+// The in-page MCP server reaches this shim only through the aliased `node:process` import (StdioServer-
+// Transport), and we hand it EXPLICIT streams, so no bundled code needs the bare global.
 
 export default proc;
 export const env = proc.env;

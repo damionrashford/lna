@@ -21,6 +21,11 @@ const NODE_SHIMS: Record<string, string> = {
   "node:process": "process.ts", "node:fs": "fs.ts", "node:fs/promises": "fs-promises.ts",
   "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "node-zlib.ts", // full surface incl. constants (just-bash)
 };
+// transformers.js has no "browser" export condition (only "node" + "default"), and Bun applies "node" →
+// it bundles the Node build (sharp + onnxruntime-node), which throws at eval in a browser. Force its WEB
+// build. (Verified via smoke test: without this, in-browser embeddings/ASR fail with a masked error.)
+let TF_WEB: string | null = null;
+try { const m = (Bun as any).resolveSync("@huggingface/transformers", import.meta.dir); TF_WEB = join(dirname(m), "..", "dist", "transformers.web.js"); } catch { /* not installed */ }
 const nodeShimPlugin = {
   name: "node-shims",
   setup(build: any) {
@@ -28,6 +33,7 @@ const nodeShimPlugin = {
       const file = NODE_SHIMS[args.path];
       return file ? { path: join(shimsDir, file) } : undefined;
     });
+    if (TF_WEB) build.onResolve({ filter: /^@huggingface\/transformers$/ }, () => ({ path: TF_WEB }));
   },
 };
 

@@ -18,8 +18,7 @@ export class Tts {
   constructor(private modelId: string, private dtype: string, private defaultVoice: string) {}
 
   async load(): Promise<void> {
-    const spec = "kokoro-js";
-    const mod: any = await import(/* @vite-ignore */ spec).catch(() => {
+    const mod: any = await import("kokoro-js").catch(() => {
       throw new Error("Voice TTS needs `kokoro-js` — add it to run Kokoro in the browser.");
     });
     const device = (navigator as any).gpu ? "webgpu" : "wasm";

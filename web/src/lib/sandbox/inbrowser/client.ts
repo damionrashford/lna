@@ -26,8 +26,7 @@ class InBrowserSandboxSession implements SandboxSession<any> {
   writeStdin = async (): Promise<string> => { throw new Error("interactive stdin isn't supported in the in-browser sandbox"); };
 
   exec = async ({ cmd, workdir }: any) => {
-    const spec = "just-bash/browser";
-    const { Bash } = (await import(/* @vite-ignore */ spec).catch(() => {
+    const { Bash } = (await import("just-bash/browser").catch(() => {
       throw new Error("In-browser shell needs `just-bash` — add it to run bash in the page.");
     })) as any;
     const t0 = performance.now();
