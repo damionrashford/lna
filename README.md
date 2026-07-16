@@ -19,7 +19,7 @@ A single-page reference covering the entire [Local Network Access](https://wicg.
 `bridge-server.ts` is a local daemon that spawns a process and pipes its stdin/stdout/stderr over WebSocket. Because LNA lets a **public** page open a socket to `127.0.0.1`, a hosted page can drive a local shell — or a **stdio MCP server** — through it. `bridge.html` is the browser side: a terminal plus a full MCP client (`initialize` → `tools/list` → `tools/call`, protocol `2025-11-25`).
 
 ```bash
-BRIDGE_TOKEN=dev bun bridge-server.ts   # 127.0.0.1:7967, token + command allowlist
+BRIDGE_TOKEN=dev bun servers/bridge.ts   # 127.0.0.1:7967, token + command allowlist
 ```
 
 Verified against `@modelcontextprotocol/server-everything`: handshake, 13 tools listed, `echo` called — all from a browser page over the LNA-gated socket. The token handshake + command allowlist exist because a spawn endpoint reachable from a public origin is otherwise remote code execution — keep the token secret if you front it with a tunnel.
@@ -29,7 +29,7 @@ Verified against `@modelcontextprotocol/server-everything`: handshake, 13 tools 
 LNA only fires when the page is a **public** origin and the fetch target is local/loopback. Opened from `localhost` the page is itself loopback, so nothing triggers. To test:
 
 1. Enable enforcement: `chrome://flags/#local-network-access-check` → **Enabled (Blocking)** (Chrome 138–141; 142+ enforces by default).
-2. Run the daemon: `bun test-server.ts` → serves `127.0.0.1:7966` (CORS JSON + WebSocket echo).
+2. Run the daemon: `bun servers/test.ts` → serves `127.0.0.1:7966` (CORS JSON + WebSocket echo).
 3. Open the **public** test platform (the GitHub Pages URL above, or a tunnel that fronts your local build) and run the suite. Grant the prompt to watch verdicts flip.
 
 ## Sources

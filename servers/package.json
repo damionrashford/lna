@@ -1,0 +1,10 @@
+{
+  "name": "@automo/servers",
+  "private": true,
+  "type": "module",
+  "description": "Local daemons reachable over LNA — the stdio bridge and the CORS/WS test server",
+  "scripts": {
+    "bridge": "bun bridge.ts",
+    "test": "bun test.ts"
+  }
+}

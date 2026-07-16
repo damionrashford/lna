@@ -1,0 +1,9 @@
+{
+  "name": "@automo/web",
+  "private": true,
+  "type": "module",
+  "description": "LNA reference site + local-agent chat UI — static, deployed to GitHub Pages",
+  "scripts": {
+    "serve": "bun x serve -l 5173 ."
+  }
+}
