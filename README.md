@@ -12,6 +12,17 @@ A single-page reference covering the entire [Local Network Access](https://wicg.
 
 **Live site:** https://damionrashford.github.io/lna/
 **Test platform:** https://damionrashford.github.io/lna/test.html
+**stdio bridge + MCP:** https://damionrashford.github.io/lna/bridge.html
+
+## The stdio bridge (HTTP/WS ⇄ stdin/stdout)
+
+`bridge-server.ts` is a local daemon that spawns a process and pipes its stdin/stdout/stderr over WebSocket. Because LNA lets a **public** page open a socket to `127.0.0.1`, a hosted page can drive a local shell — or a **stdio MCP server** — through it. `bridge.html` is the browser side: a terminal plus a full MCP client (`initialize` → `tools/list` → `tools/call`, protocol `2025-11-25`).
+
+```bash
+BRIDGE_TOKEN=dev bun bridge-server.ts   # 127.0.0.1:7967, token + command allowlist
+```
+
+Verified against `@modelcontextprotocol/server-everything`: handshake, 13 tools listed, `echo` called — all from a browser page over the LNA-gated socket. The token handshake + command allowlist exist because a spawn endpoint reachable from a public origin is otherwise remote code execution — keep the token secret if you front it with a tunnel.
 
 ## Local testing
 

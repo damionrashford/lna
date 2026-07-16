@@ -475,8 +475,9 @@ bun test-server.ts     # → http://127.0.0.1:7966/</code></pre>
     <p class="small muted">The probe runs <code>fetch(url, { targetAddressSpace })</code>. A grant lets the connection through; reading the response still requires the endpoint to send CORS headers — LNA gates the <em>connection</em>, CORS gates the <em>read</em>.</p>
     <div class="cta">
       <a class="btn primary" href="test.html">Open the full test platform →</a>
-      <span class="small muted">environment detection · permission dashboard · the four canonical cases · WebSocket · iframe delegation · console</span>
+      <a class="btn ghost" href="bridge.html">The stdio bridge → MCP</a>
     </div>
+    <p class="small muted" style="margin-top:calc(var(--u)*1.5)">The test platform runs the four canonical cases, WebSocket, iframe delegation, and a live console. The <a href="bridge.html">stdio bridge</a> goes further — it pipes a local process's stdin/stdout over WebSocket-through-LNA, and runs a full <b>MCP client</b> against a stdio MCP server (the pattern for a hosted browser agent driving local tools).</p>
   </div>
 </section>
 

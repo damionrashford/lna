@@ -37,3 +37,5 @@ const server = Bun.serve({
 });
 
 console.log(`lna test daemon → http://${server.hostname}:${server.port}/  (+ ws://${server.hostname}:${server.port})`);
+
+export {};
