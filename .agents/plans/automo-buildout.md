@@ -1,8 +1,14 @@
 # AUTOMO build-out — plan & status
 
-**Branch:** `feat/automo-buildout` (5 commits over `main`, local only, not pushed).
+**Branch:** `feat/automo-buildout` (11 commits over `main`, local only, not pushed).
 **State:** `bun x tsc --noEmit -p web/tsconfig.json` and `bun run --cwd web build` both GREEN.
 **Pick up:** `git checkout feat/automo-buildout`.
+
+**2026-07-16 session:** built D, B, F, A, C (+ a hardware-signal deepening pass). Only E (computer use)
+and G (browser smoke tests) remain — both need a real browser/host and can't be verified headlessly.
+Two runtime-enable deps are intentionally NOT installed (ask-gated, unverifiable headlessly, heavy):
+`@huggingface/transformers` (enables B's BrowserModel + A's Whisper) and `kokoro-js` (enables A's TTS).
+The code bundles without them (variable-specifier dynamic imports) and throws a clear message until added.
 
 Verify anytime:
 ```bash
@@ -65,7 +71,15 @@ Also verified live: HMAC handshake (auth/legacy/reject), gzip+base64 round-trip,
 
 ## UNDONE — pick-up plan (by leverage)
 
-### A. Voice port (voice-box → lna) — marquee feature
+> **DONE this session (committed):** D (bridge `/hw` probe + exact-numbers refine, live-tested on darwin),
+> B (`runtime/browser-model.ts` — SDK Model over the browser engine), F (HF-remote fetch branch +
+> array/object elicitation forms), A (`lib/voice/*` — RealtimeSession over a local STT→shared-model→TTS
+> transport; the brain is the SAME provider-aware model as the text agent, not a second one; mic toggle
+> in Composer), C (lib folded into runtime·mcp·sandbox·net·storage·platform·tools·hitl). Plus a hardware-
+> signal deepening: oscpu fallback, mobile detection, WebGL-renderer GPU fallback, WASM SIMD+threads,
+> idle-scheduled detection. **Remaining: E and G only** (need a real browser/host).
+
+### A. Voice port (voice-box → lna) — DONE — marquee feature
 Source of truth: `../voice-box/src/transport/localTransport.ts` (the `RealtimeTransportLayer` impl) +
 `../voice-box/src/config.ts`. `RealtimeSession` keeps owning history/tools/guardrails; the transport
 synthesizes the event contract: `item_update(user) → turn_started → transcript_delta.. → audio.. →
@@ -89,13 +103,13 @@ Steps:
 
 Notes: kokoro-js and whisper both pull multi-MB weights (cache in OPFS/Cache API). Needs real mic/audio testing.
 
-### B. In-browser engine actually driving the agent
+### B. In-browser engine actually driving the agent — DONE
 `@automo/inference/transformers.ts` `createBrowserEngine` generates text but has no HTTP endpoint, so the
 SandboxAgent can't point at it. Wire it into a **custom SDK `Model`** (implement the `Model` interface →
 call `createBrowserEngine().chat`) so the `browser` provider drives the agent (not just chat). Add
 `@huggingface/transformers` (currently a runtime-resolved dynamic import so it bundles without the dep).
 
-### C. Finish the lib reorg (mechanical)
+### C. Finish the lib reorg (mechanical) — DONE
 Only `agent/` is foldered. Apply:
 ```
 lib/ runtime/(transport·model·context·guardrails·compact)  mcp/(index·server)  sandbox/(index·persist·roots)
@@ -105,7 +119,7 @@ Folder-per-old-primary preserves external `from "./X"` (→ X/index.ts). Update 
 imports (one level deeper) + secondary-file imports. Do as its own commit; verify tsc after each group.
 Hard rule: **no file > 235 LOC** (already satisfied — agent.ts was the only violator).
 
-### D. Bridge hardware probe
+### D. Bridge hardware probe — DONE
 Add a bridge RPC that runs `system_profiler SPDisplaysDataType` / `sysctl hw.memsize` (macOS),
 `nvidia-smi --query-gpu=memory.total` (Linux/Win) → real VRAM/RAM/chip → refine `recommendModel`
 (WebGPU is coarse: caps deviceMemory at 8, hides VRAM). Surface exact sizing on Connect.
@@ -118,7 +132,7 @@ macOS Screen-Recording & Accessibility perms. **Only fires with an OpenAI comput
 won't emit `computer_call` actions. Interface confirmed at `@openai/agents-core/dist/computer.d.ts`
 (9 required methods; SDK ships interface + dispatch only, no implementation).
 
-### F. Smaller follow-ups
+### F. Smaller follow-ups — DONE (HF fetch + elicitation); Ed25519/HF-remote-edge remain
 - Ed25519 bridge auth (non-extractable key + one-time public-key pairing) — real upgrade **if** you tunnel
   the bridge; WebAuthn does NOT fit (it authenticates a human to a remote RP, not a local daemon).
 - HF-remote fetch: `lnaFetch` adds the loopback hint always; branch to plain fetch for public HF URLs.
