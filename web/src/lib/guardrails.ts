@@ -16,13 +16,17 @@ const hasSecret = (s: string) => SECRET_RE.test(s);
 const redact = (s: string) => s.replace(new RegExp(SECRET_RE, "g"), "«redacted-credential»");
 const textOf = (x: any) => (typeof x === "string" ? x : JSON.stringify(x ?? ""));
 
+// read the guardrails toggle from the run's AutomoContext (single source of truth), falling back to
+// the live S setting if a run somehow provided no context.
+const guardrailsOn = (context: any) => context?.context?.settings?.guardrails ?? S.guardrails;
+
 // ---- agent-level ----
 // Input guardrail: block before the model runs if the user pasted a live credential.
 export const agentInputGuardrails: InputGuardrail[] = [{
   name: "no-pasted-credentials",
   runInParallel: false, // block the model until this completes
-  execute: async ({ input }) => {
-    const trip = S.guardrails && hasSecret(textOf(input));
+  execute: async ({ input, context }) => {
+    const trip = guardrailsOn(context) && hasSecret(textOf(input));
     return { tripwireTriggered: !!trip, outputInfo: trip ? "a credential was detected in the input" : null };
   },
 }];
@@ -30,8 +34,8 @@ export const agentInputGuardrails: InputGuardrail[] = [{
 // Output guardrail: block the final answer if it would echo a credential.
 export const agentOutputGuardrails: OutputGuardrail[] = [{
   name: "no-leaked-credentials",
-  execute: async ({ agentOutput }) => {
-    const trip = S.guardrails && hasSecret(String(agentOutput ?? ""));
+  execute: async ({ agentOutput, context }) => {
+    const trip = guardrailsOn(context) && hasSecret(String(agentOutput ?? ""));
     return { tripwireTriggered: !!trip, outputInfo: trip ? "a credential was detected in the output" : null };
   },
 }];
@@ -40,17 +44,17 @@ export const agentOutputGuardrails: OutputGuardrail[] = [{
 // Input: refuse to send what looks like a credential to a web search.
 export const noSecretsToWeb = defineToolInputGuardrail({
   name: "no-secrets-to-web",
-  run: async ({ toolCall }) =>
-    S.guardrails && hasSecret(toolCall.arguments || "")
+  run: async ({ toolCall, context }) =>
+    guardrailsOn(context) && hasSecret(toolCall.arguments || "")
       ? ToolGuardrailFunctionOutputFactory.rejectContent("Refusing to send what looks like a credential to a web search. Remove it and try again.")
       : ToolGuardrailFunctionOutputFactory.allow(),
 });
 // Output: redact credentials out of tool results before the model sees them.
 export const redactToolSecrets = defineToolOutputGuardrail({
   name: "redact-tool-secrets",
-  run: async ({ output }) => {
+  run: async ({ output, context }) => {
     const s = String(output ?? "");
-    return S.guardrails && hasSecret(s)
+    return guardrailsOn(context) && hasSecret(s)
       ? ToolGuardrailFunctionOutputFactory.rejectContent(redact(s))
       : ToolGuardrailFunctionOutputFactory.allow();
   },
