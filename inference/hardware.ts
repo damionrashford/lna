@@ -10,6 +10,7 @@ export interface GpuInfo {
   description: string;
   f16: boolean;        // shader-f16 feature (matters for LLM inference perf)
   maxBufferMiB: number;
+  maxStorageBindingMiB: number; // web-llm HARD-gates model load on this — a real OOM predictor
   fallback: boolean;   // software/fallback adapter → effectively no GPU accel
 }
 
@@ -72,6 +73,7 @@ async function detectGpu(): Promise<GpuInfo | null> {
       description: info.description ?? info.device ?? "",
       f16: !!adapter.features?.has?.("shader-f16"),
       maxBufferMiB: Math.round((adapter.limits?.maxBufferSize ?? 0) / (1024 * 1024)),
+      maxStorageBindingMiB: Math.round((adapter.limits?.maxStorageBufferBindingSize ?? 0) / (1024 * 1024)),
       fallback: !!(info.isFallbackAdapter ?? adapter.isFallbackAdapter),
     };
   } catch { return null; }
@@ -129,7 +131,18 @@ export async function detectHardware(): Promise<HardwareProfile> {
   };
 }
 
-export interface ModelRecommendation { tier: "cpu" | "small" | "medium" | "large"; note: string; examples: string[]; canRunInBrowser: boolean }
+export interface ModelRecommendation { tier: "cpu" | "small" | "medium" | "large"; note: string; examples: string[]; canRunInBrowser: boolean; budgetGB: number }
+
+// GPU footprint budget for in-browser inference (from gh-pages-react/webgpu.ts). WebGPU exposes no
+// total-VRAM figure, so derive a budget: a RAM tier ceilinged by the GPU's single-buffer limit. Fallback
+// (software) adapters get the floor. This is what tells the UI which in-browser model won't OOM.
+export function gpuBudgetGB(p: HardwareProfile): number {
+  if (!p.gpu || p.gpu.fallback) return 0.6;
+  const ram = p.ramGiB ?? 8;
+  const ramBudget = ram >= 8 ? 6 : ram >= 4 ? 2.5 : ram >= 2 ? 1.2 : 0.7;
+  const bufCeil = Math.max((p.gpu.maxBufferMiB / 1000) * 0.9, 0.6);
+  return Math.round(Math.min(ramBudget, bufCeil) * 10) / 10;
+}
 
 // Exact host hardware, measured by the bridge (system_profiler / sysctl / nvidia-smi) rather than the
 // browser's privacy-limited APIs. Present only when the local bridge is running. Refines the coarse
@@ -161,12 +174,14 @@ export function recommendFromBridge(hw: BridgeHardware, browser?: ModelRecommend
   const ram = hw.ramGiB ?? 4;
   const mem = hw.appleSilicon ? ram : Math.max(hw.vramGiB ?? 0, 0);
   const canRunInBrowser = browser?.canRunInBrowser ?? false;
+  const budgetGB = browser?.budgetGB ?? 0;
   const where = hw.appleSilicon ? `${ram}GB unified memory` : `${mem}GB VRAM`;
-  if (mem < 6) return { tier: "small", note: `${where} — a 3–4B model comfortably.`, examples: ["llama3.2:3b", "qwen3:4b"], canRunInBrowser };
-  if (mem < 12) return { tier: "medium", note: `${where} — a 7–8B model, or a 14B quantized.`, examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], canRunInBrowser };
-  if (mem < 24) return { tier: "medium", note: `${where} — a 14B, or a 20B quantized.`, examples: ["qwen3:14b", "gpt-oss:20b (Q4)"], canRunInBrowser };
-  if (mem < 48) return { tier: "large", note: `${where} — a 32B, or a 20B at full precision.`, examples: ["qwen3:32b", "gpt-oss:20b"], canRunInBrowser };
-  return { tier: "large", note: `${where} — a 70B quantized, or 32B at full precision.`, examples: ["llama3.3:70b (Q4)", "qwen3:32b"], canRunInBrowser };
+  const base = { canRunInBrowser, budgetGB };
+  if (mem < 6) return { tier: "small", note: `${where} — a 3–4B model comfortably.`, examples: ["llama3.2:3b", "qwen3:4b"], ...base };
+  if (mem < 12) return { tier: "medium", note: `${where} — a 7–8B model, or a 14B quantized.`, examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], ...base };
+  if (mem < 24) return { tier: "medium", note: `${where} — a 14B, or a 20B quantized.`, examples: ["qwen3:14b", "gpt-oss:20b (Q4)"], ...base };
+  if (mem < 48) return { tier: "large", note: `${where} — a 32B, or a 20B at full precision.`, examples: ["qwen3:32b", "gpt-oss:20b"], ...base };
+  return { tier: "large", note: `${where} — a 70B quantized, or 32B at full precision.`, examples: ["llama3.3:70b (Q4)", "qwen3:32b"], ...base };
 }
 
 // Heuristic model-size recommendation. RAM/unified-memory dominates on Apple Silicon; GPU tier + f16
@@ -174,13 +189,15 @@ export function recommendFromBridge(hw: BridgeHardware, browser?: ModelRecommend
 export function recommendModel(p: HardwareProfile): ModelRecommendation {
   const ram = p.ramGiB ?? 4;                 // deviceMemory caps at 8, so ≥8 is "8 or more"
   const goodGpu = !!p.gpu && !p.gpu.fallback && p.gpu.maxBufferMiB >= 256;
+  const budgetGB = gpuBudgetGB(p);
   // A phone never runs a big model in-browser regardless of what WebGPU reports; cap it hard.
-  if (p.mobile) return { tier: "cpu", note: "Mobile device — a tiny model only; prefer a local server over the network.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: false };
+  if (p.mobile) return { tier: "cpu", note: "Mobile device — a tiny model only; prefer a local server over the network.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: false, budgetGB };
   // WebGPU is the fast path; without it, SIMD + threaded WASM can still run a small model on CPU.
   const wasmViable = p.wasm.simd && p.wasm.threads && ram >= 8;
   const canRunInBrowser = (p.webgpu && goodGpu && ram >= 8) || wasmViable;
-  if (!p.gpu || p.gpu.fallback || ram <= 2) return { tier: "cpu", note: wasmViable ? "No GPU, but SIMD+threaded WASM can run a small model on CPU." : "No usable GPU or low memory — small quantized model on CPU.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: wasmViable };
-  if (ram <= 4) return { tier: "small", note: "Modest memory — a 3–4B model comfortably.", examples: ["llama3.2:3b", "qwen3:4b"], canRunInBrowser };
-  if (ram < 8 || !p.gpu.f16) return { tier: "medium", note: "Mid-range — an 7–8B model, or a 14B quantized.", examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], canRunInBrowser };
-  return { tier: "large", note: "High memory + capable GPU — a 20B+ model, or 70B quantized on Apple Silicon.", examples: ["gpt-oss:20b", "qwen3:32b (Q4)"], canRunInBrowser };
+  const base = { canRunInBrowser, budgetGB };
+  if (!p.gpu || p.gpu.fallback || ram <= 2) return { tier: "cpu", note: wasmViable ? "No GPU, but SIMD+threaded WASM can run a small model on CPU." : "No usable GPU or low memory — small quantized model on CPU.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: wasmViable, budgetGB };
+  if (ram <= 4) return { tier: "small", note: "Modest memory — a 3–4B model comfortably.", examples: ["llama3.2:3b", "qwen3:4b"], ...base };
+  if (ram < 8 || !p.gpu.f16) return { tier: "medium", note: "Mid-range — an 7–8B model, or a 14B quantized.", examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], ...base };
+  return { tier: "large", note: "High memory + capable GPU — a 20B+ model, or 70B quantized on Apple Silicon.", examples: ["gpt-oss:20b", "qwen3:32b (Q4)"], ...base };
 }
