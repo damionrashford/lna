@@ -91,7 +91,9 @@ const result = await Bun.build({
   entrypoints: ["./index.html"],
   outdir: "./dist",
   minify: true,
-  sourcemap: "linked",
+  // Source maps of the bundled in-browser ML libs (transformers.js/web-llm/kokoro) are ~280MB — no place
+  // in a Pages artifact. Off by default (the deploy build); opt in locally with SOURCEMAPS=1.
+  sourcemap: Bun.env.SOURCEMAPS === "1" ? "linked" : "none",
   publicPath: base,
   external: externalDeps,
   plugins: [reactCompiler, tailwind, nodeShimPlugin],
