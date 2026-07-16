@@ -287,6 +287,12 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
       <input id="mcp-auth" placeholder="auth token (optional, for HTTP servers)" style="margin-top:6px;width:100%">
       <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.82rem;color:var(--ink-mid);cursor:pointer"><input type="checkbox" id="set-approve"> Require approval before running any tool call</label>
       <div class="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local; auth + headers supported). <b>stdio</b> runs the command through the bridge daemon over LNA. Tools become the agent's tools (prefixed <code>mcp_&lt;label&gt;_</code>). Hosted MCP tools aren't listed — they route through OpenAI's Responses API and need an OpenAI model, not a local one.</div></div>
+    <div class="field"><label>System prompt</label>
+      <textarea id="set-instructions" rows="4" spellcheck="false" placeholder="(using the built-in AUTOMO default — describe custom behavior here to override)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--ink);font-family:inherit;font-size:0.82rem;resize:vertical;line-height:1.5"></textarea>
+      <div class="note">The LLM context. Sent as <code>instructions</code> on every turn, with live run context appended (model, granted folder, MCP servers, date). Blank = the built-in default.</div></div>
+    <div class="field"><label>Context budget (characters)</label>
+      <input id="set-budget" type="number" min="2000" step="1000" value="16000" style="font-family:var(--mono)">
+      <div class="note">History is trimmed to this size before each turn (oldest messages drop first, tool call/output pairs kept together) so long chats + tool loops don't overflow the model.</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
@@ -314,6 +320,10 @@ const store = {
   set image(v){ localStorage.setItem('automo.image', v); },
   get approve(){ return localStorage.getItem('automo.approve') === '1'; },
   set approve(v){ localStorage.setItem('automo.approve', v ? '1' : '0'); },
+  get instructions(){ return localStorage.getItem('automo.instructions') || ''; },
+  set instructions(v){ localStorage.setItem('automo.instructions', v); },
+  get budget(){ return +(localStorage.getItem('automo.budget') || 16000); },
+  set budget(v){ localStorage.setItem('automo.budget', v); },
   get chat(){ try{ return JSON.parse(localStorage.getItem('automo.chat')||'[]'); }catch{ return []; } },
   set chat(v){ localStorage.setItem('automo.chat', JSON.stringify(v.slice(-100))); },
 };
@@ -676,7 +686,8 @@ function toolChip(name, argsStr) {
 
 // one streaming turn: text → botEl, reasoning → thinking, function calls collected. Returns {text, calls}.
 async function streamTurn(model, input, tools, botEl, cursor) {
-  const body = { model, stream: true, input }; if (tools.length) body.tools = tools;
+  const body = { model, stream: true, instructions: buildInstructions(), input: trimHistory(input, store.budget) };
+  if (tools.length) body.tools = tools;
   const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/responses', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
@@ -706,6 +717,37 @@ async function streamTurn(model, input, tools, botEl, cursor) {
     }
   }
   return { text, calls: Object.values(calls) };
+}
+
+// ---- LLM context: system instructions (static + dynamic run context) ----
+const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser and connected to their own machine over Local Network Access.
+Tools you can call:
+- Private memory (always available): mem_list, mem_read (supports offset+limit for large files), mem_write. Memory persists across sessions.
+- Files (only if a folder is granted): fs_list (glob like **/*.md), fs_read, fs_write.
+- Tools from any connected MCP server (named mcp_<server>_<tool>).
+How to work:
+- Prefer tools over guessing. Read a file before answering questions about it.
+- Large tool outputs are saved to memory automatically — read specific parts with mem_read(path, offset, limit) rather than requesting the whole thing.
+- Save durable notes, plans, and useful facts with mem_write so future sessions can recall them.
+- Be concise and direct.`;
+function buildInstructions() {
+  const base = store.instructions.trim() || DEFAULT_INSTRUCTIONS;
+  const folder = fsRoot ? fsRoot.name : 'none';
+  const mcp = mcpServers.filter((s) => s.connected).map((s) => s.label);
+  const now = new Date().toISOString().slice(0, 10);
+  return `${base}\n\n[Run context — model: ${store.model || 'unknown'} · granted folder: ${folder} · MCP servers: ${mcp.length ? mcp.join(', ') : 'none'} · date: ${now}]`;
+}
+// keep the conversation within a char budget: drop oldest whole messages (never orphan a tool call/output)
+function trimHistory(convo, budget) {
+  const size = (m) => (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content || m).length);
+  let total = convo.reduce((n, m) => n + size(m), 0);
+  const out = convo.slice();
+  while (total > budget && out.length > 2) {
+    // drop from the front, but keep function_call/function_call_output paired removals tidy
+    const m = out.shift(); total -= size(m);
+    if (m.type === 'function_call' && out[0]?.type === 'function_call_output') { total -= size(out[0]); out.shift(); }
+  }
+  return out;
 }
 
 // text + vision chat with an agentic tool loop (Responses API, streaming). Vision = attach an image.
@@ -854,6 +896,10 @@ $('#mcp-add').addEventListener('click', () => {
 });
 $('#set-approve').checked = store.approve;
 $('#set-approve').addEventListener('change', (e) => { store.approve = e.target.checked; });
+$('#set-instructions').value = store.instructions;
+$('#set-instructions').addEventListener('change', (e) => { store.instructions = e.target.value; });
+$('#set-budget').value = store.budget;
+$('#set-budget').addEventListener('change', (e) => { store.budget = Math.max(2000, +e.target.value || 16000); });
 
 // ---- boot ----
 setStatus('', 'not connected');
