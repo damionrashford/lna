@@ -1,5 +1,5 @@
 {
-  "name": "lna-sandbox-agent",
+  "name": "lna-agent",
   "private": true,
   "type": "module",
   "description": "Non-hosted OpenAI Agents JS sandbox agent — local Ollama model + UnixLocalSandboxClient",

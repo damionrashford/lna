@@ -2,7 +2,7 @@
 // apply_patch + memory-generation now function because the shim forces the function-tool
 // fallbacks, while inference stays on Ollama's /v1/responses (non-hosted end to end).
 //
-// Run: OPENAI_AGENTS_DISABLE_TRACING=1 bun agent-full-shim.ts
+// Run: OPENAI_AGENTS_DISABLE_TRACING=1 bun agent.ts
 import { run } from '@openai/agents';
 import {
   Manifest,
@@ -12,21 +12,15 @@ import {
   skills,
   memory,
   compaction,
+  gitRepo,
 } from '@openai/agents/sandbox';
-import {
-  UnixLocalSandboxClient,
-  localDirLazySkillSource,
-} from '@openai/agents/sandbox/local';
+import { UnixLocalSandboxClient } from '@openai/agents/sandbox/local';
 import { readFile, readdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { installOllamaShim } from './ollama-shim.ts';
+import { join } from 'node:path';
+import { installOllamaShim } from './ollama.ts';
 
 const MODEL = process.env.AGENT_MODEL || 'local-agent:latest';
 installOllamaShim({ model: MODEL });
-
-const here = dirname(fileURLToPath(import.meta.url));
-const skillsDir = join(here, 'skills');
 
 const manifest = new Manifest({
   entries: {
@@ -52,7 +46,12 @@ const agent = new SandboxAgent({
   capabilities: [
     shell(),
     filesystem(), // apply_patch now registers as a function tool (shim)
-    skills({ lazyFrom: localDirLazySkillSource({ src: skillsDir }) }),
+    skills({
+      lazyFrom: {
+        source: gitRepo({ host: 'github.com', repo: 'damionrashford/lna', ref: 'main', subpath: '.agents/skills' }),
+        index: [{ name: 'sum-writer', description: 'Compute a sum and write it to result.txt (from the lna repo).' }],
+      },
+    }),
     memory({ generate: { phaseOneModel: MODEL, phaseTwoModel: MODEL } }), // local memory models via shim
     compaction(),
   ],
