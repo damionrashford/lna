@@ -151,17 +151,21 @@ export async function boot() {
   initTabs();
   // detect the machine and recommend a model size (coarse browser APIs), then refine with the bridge's
   // exact RAM/VRAM/chip if it's running — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box
-  // reads as 8GB until the bridge reports real numbers.
-  detectHardware().then(async (p) => {
-    const rec = recommendModel(p);
-    const summary = [p.gpu?.description || p.gpu?.vendor || null, p.ramGiB ? `${p.ramGiB}GB` : null, p.arch, p.platform].filter(Boolean).join(" · ");
-    setMachine({ tier: rec.tier, note: rec.note, examples: rec.examples, summary });
-    const hw = await probeBridgeHardware();
-    if (hw?.ramGiB || hw?.vramGiB) {
-      const exact = recommendFromBridge(hw, rec);
-      setMachine({ tier: exact.tier, note: exact.note, examples: exact.examples, summary: bridgeSummary(hw) });
-    }
-  }).catch(() => { /* detection best-effort */ });
+  // reads as 8GB until the bridge reports real numbers. Runs at idle (Background Tasks API) so it never
+  // blocks first paint; the `timeout` guarantees it still fires on a busy main thread.
+  const idle = (globalThis as any).requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 200));
+  idle(() => {
+    detectHardware().then(async (p) => {
+      const rec = recommendModel(p);
+      const summary = [p.gpuName, p.ramGiB ? `${p.ramGiB}GB` : null, p.mobile ? "mobile" : p.arch, p.platform].filter(Boolean).join(" · ");
+      setMachine({ tier: rec.tier, note: rec.note, examples: rec.examples, summary });
+      const hw = await probeBridgeHardware();
+      if (hw?.ramGiB || hw?.vramGiB) {
+        const exact = recommendFromBridge(hw, rec);
+        setMachine({ tier: exact.tier, note: exact.note, examples: exact.examples, summary: bridgeSummary(hw) });
+      }
+    }).catch(() => { /* detection best-effort */ });
+  }, { timeout: 2000 });
   restoreFolder();
   requestDurable(); // keep the OPFS workspace cache from being evicted
   loadSnaps();

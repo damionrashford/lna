@@ -24,6 +24,38 @@ export interface HardwareProfile {
   storageGiB: number | null;   // free-ish OPFS/IDB quota headroom (for in-browser weight caching)
   network: { effectiveType: string; downlinkMbps: number; saveData: boolean } | null;
   onBattery: boolean | null;   // true when discharging (affects powerPreference / heavy inference)
+  batteryLevel: number | null; // 0..1 — a low battery discourages a heavy in-browser run
+  mobile: boolean | null;      // touch + coarse-pointer heuristic — phones can't run big models
+  gpuName: string | null;      // GPU renderer string — from WebGPU, else WebGL (Safari/Firefox have no WebGPU)
+  wasm: { simd: boolean; threads: boolean }; // WASM inference speed gates: SIMD, and threads (needs crossOriginIsolated)
+}
+
+// GPU renderer string from a WebGL context — the only GPU identity available when WebGPU is absent
+// (Safari, Firefox without the flag). May be blank under anti-fingerprinting (Firefox RFP, Brave).
+function detectWebglGpu(): string | null {
+  try {
+    const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    const gl = canvas?.getContext("webgl") || canvas?.getContext("experimental-webgl");
+    if (!gl) return null;
+    const ext = (gl as any).getExtension("WEBGL_debug_renderer_info");
+    const name = ext ? (gl as any).getParameter(ext.UNMASKED_RENDERER_WEBGL) : null;
+    return name || null;
+  } catch { return null; }
+}
+
+// WebAssembly capability probe. SIMD (fixed-width v128) and threads (shared memory + atomics, which
+// need a cross-origin-isolated page) are the two levers that make CPU/WASM inference viable for the
+// in-browser engine when there's no WebGPU. SIMD is detected by validating a tiny module that uses it.
+function detectWasm(): { simd: boolean; threads: boolean } {
+  let simd = false;
+  try {
+    // minimal module whose body is `v128.const 0 0` — validates only where SIMD is supported
+    simd = typeof WebAssembly === "object" && WebAssembly.validate(new Uint8Array([
+      0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11,
+    ]));
+  } catch { simd = false; }
+  const threads = typeof SharedArrayBuffer !== "undefined" && (globalThis as any).crossOriginIsolated === true;
+  return { simd, threads };
 }
 
 async function detectGpu(): Promise<GpuInfo | null> {
@@ -45,13 +77,24 @@ async function detectGpu(): Promise<GpuInfo | null> {
   } catch { return null; }
 }
 
+// Parse the Firefox-only `navigator.oscpu` string (e.g. "Intel Mac OS X", "Linux x86_64",
+// "Windows NT 10.0; Win64; x64") into a coarse {platform, arch} — the fallback when UA Client Hints
+// are absent (Firefox ships no userAgentData).
+function parseOscpu(s: string): { arch: string | null; platform: string | null } {
+  const arch = /x64|Win64|x86_64|amd64|Intel/i.test(s) ? "x86_64" : /arm|aarch64/i.test(s) ? "arm" : /i686|i386|x86/i.test(s) ? "x86" : null;
+  const platform = /Mac OS|macOS/i.test(s) ? "macOS" : /Windows/i.test(s) ? "Windows" : /Linux/i.test(s) ? "Linux" : null;
+  return { arch, platform };
+}
+
 async function detectUaHints(): Promise<{ arch: string | null; platform: string | null; platformVersion: string | null }> {
   const ua = (navigator as any).userAgentData;
-  if (!ua?.getHighEntropyValues) return { arch: null, platform: ua?.platform ?? null, platformVersion: null };
+  const oscpu = (navigator as any).oscpu as string | undefined; // Firefox-only fallback
+  const fb = oscpu ? parseOscpu(oscpu) : { arch: null, platform: null };
+  if (!ua?.getHighEntropyValues) return { arch: fb.arch, platform: ua?.platform ?? fb.platform, platformVersion: null };
   try {
     const h = await ua.getHighEntropyValues(["architecture", "bitness", "platform", "platformVersion", "model"]);
-    return { arch: h.architecture ?? null, platform: h.platform ?? null, platformVersion: h.platformVersion ?? null };
-  } catch { return { arch: null, platform: ua.platform ?? null, platformVersion: null }; }
+    return { arch: h.architecture ?? fb.arch, platform: h.platform ?? fb.platform, platformVersion: h.platformVersion ?? null };
+  } catch { return { arch: fb.arch, platform: ua.platform ?? fb.platform, platformVersion: null }; }
 }
 
 export async function detectHardware(): Promise<HardwareProfile> {
@@ -60,8 +103,14 @@ export async function detectHardware(): Promise<HardwareProfile> {
   let storageGiB: number | null = null;
   try { const e = await navigator.storage?.estimate?.(); if (e?.quota != null) storageGiB = Math.round(((e.quota - (e.usage ?? 0)) / 1e9) * 10) / 10; } catch { /* unsupported */ }
   const conn = (navigator as any).connection;
-  let onBattery: boolean | null = null;
-  try { const b = await (navigator as any).getBattery?.(); if (b) onBattery = !b.charging; } catch { /* unsupported */ }
+  let onBattery: boolean | null = null, batteryLevel: number | null = null;
+  try { const b = await (navigator as any).getBattery?.(); if (b) { onBattery = !b.charging; batteryLevel = typeof b.level === "number" ? b.level : null; } } catch { /* unsupported */ }
+  // Mobile: prefer the authoritative UA-CH boolean; else a touchscreen AND coarse primary pointer (a
+  // laptop trackpad is "fine", so it stays desktop). Keeps us from recommending a 20B to an iPhone.
+  const uaMobile = (navigator as any).userAgentData?.mobile;
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const touch = (navigator.maxTouchPoints ?? 0) > 0;
+  const gpuName = gpu?.description || gpu?.vendor || detectWebglGpu();
   return {
     ramGiB: (navigator as any).deviceMemory ?? null,
     cpuCores: navigator.hardwareConcurrency ?? null,
@@ -73,6 +122,10 @@ export async function detectHardware(): Promise<HardwareProfile> {
     storageGiB,
     network: conn ? { effectiveType: conn.effectiveType ?? "", downlinkMbps: conn.downlink ?? 0, saveData: !!conn.saveData } : null,
     onBattery,
+    batteryLevel,
+    mobile: typeof uaMobile === "boolean" ? uaMobile : touch && coarse,
+    gpuName,
+    wasm: detectWasm(),
   };
 }
 
@@ -121,8 +174,12 @@ export function recommendFromBridge(hw: BridgeHardware, browser?: ModelRecommend
 export function recommendModel(p: HardwareProfile): ModelRecommendation {
   const ram = p.ramGiB ?? 4;                 // deviceMemory caps at 8, so ≥8 is "8 or more"
   const goodGpu = !!p.gpu && !p.gpu.fallback && p.gpu.maxBufferMiB >= 256;
-  const canRunInBrowser = p.webgpu && goodGpu && ram >= 8;
-  if (!p.gpu || p.gpu.fallback || ram <= 2) return { tier: "cpu", note: "No usable GPU or low memory — small quantized model on CPU.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: false };
+  // A phone never runs a big model in-browser regardless of what WebGPU reports; cap it hard.
+  if (p.mobile) return { tier: "cpu", note: "Mobile device — a tiny model only; prefer a local server over the network.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: false };
+  // WebGPU is the fast path; without it, SIMD + threaded WASM can still run a small model on CPU.
+  const wasmViable = p.wasm.simd && p.wasm.threads && ram >= 8;
+  const canRunInBrowser = (p.webgpu && goodGpu && ram >= 8) || wasmViable;
+  if (!p.gpu || p.gpu.fallback || ram <= 2) return { tier: "cpu", note: wasmViable ? "No GPU, but SIMD+threaded WASM can run a small model on CPU." : "No usable GPU or low memory — small quantized model on CPU.", examples: ["llama3.2:1b", "qwen3:1.7b"], canRunInBrowser: wasmViable };
   if (ram <= 4) return { tier: "small", note: "Modest memory — a 3–4B model comfortably.", examples: ["llama3.2:3b", "qwen3:4b"], canRunInBrowser };
   if (ram < 8 || !p.gpu.f16) return { tier: "medium", note: "Mid-range — an 7–8B model, or a 14B quantized.", examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], canRunInBrowser };
   return { tier: "large", note: "High memory + capable GPU — a 20B+ model, or 70B quantized on Apple Silicon.", examples: ["gpt-oss:20b", "qwen3:32b (Q4)"], canRunInBrowser };
