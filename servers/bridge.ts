@@ -21,7 +21,7 @@ import { Manifest } from "@openai/agents/sandbox";
 const toManifest = (input: any) => (input instanceof Manifest ? input : new Manifest(input ?? { entries: {} }));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const PORT = 7967;
+const PORT = Number(Bun.env.BRIDGE_PORT) || 7967;
 const TOKEN = Bun.env.BRIDGE_TOKEN || crypto.randomUUID();
 const ALLOW = new Set(
   (Bun.env.BRIDGE_ALLOW || "bash,sh,zsh,node,bun,python3,echo,cat,npx,bunx,uvx,uv,deno").split(",").map((s) => s.trim()),
@@ -37,7 +37,21 @@ const sandboxClient = new UnixLocalSandboxClient();
 const u8ToB64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
 const b64ToU8 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
 
-type Conn = { authed: boolean; proc: any; sessions: Map<string, any> };
+// Auth: the browser proves it knows TOKEN by returning HMAC-SHA256(TOKEN, per-connection nonce), so
+// the token itself never crosses the wire and a captured handshake can't be replayed. Web Crypto
+// (SubtleCrypto) ships in Bun. A plaintext token is still accepted for older clients.
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+
+type Conn = { authed: boolean; proc: any; sessions: Map<string, any>; nonce: string };
 
 // dispatch one sandbox RPC op against a live UnixLocalSandboxSession
 async function sandboxOp(d: Conn, msg: any): Promise<any> {
@@ -46,7 +60,9 @@ async function sandboxOp(d: Conn, msg: any): Promise<any> {
     const session: any = await (sandboxClient as any).create({ manifest: toManifest(msg.manifest) });
     const sid = crypto.randomUUID();
     d.sessions.set(sid, session);
-    return { sid, state: serializeState(session.state) };
+    // forward supportsPty at create so the browser proxy can answer it synchronously — the shell
+    // capability only registers write_stdin (interactive/long-running process control) when true.
+    return { sid, state: serializeState(session.state), supportsPty: session.supportsPty?.() ?? false };
   }
   const session = d.sessions.get(msg.sid);
   if (!session) throw new Error("no sandbox session " + msg.sid);
@@ -91,7 +107,7 @@ const server = Bun.serve<Conn, {}>({
   fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
-      if (srv.upgrade(req, { data: { authed: false, proc: null, sessions: new Map() } })) return;
+      if (srv.upgrade(req, { data: { authed: false, proc: null, sessions: new Map(), nonce: "" } })) return;
       return new Response("upgrade failed", { status: 400 });
     }
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -102,7 +118,8 @@ const server = Bun.serve<Conn, {}>({
   },
   websocket: {
     open(ws) {
-      ws.send(JSON.stringify({ type: "hello", allow: [...ALLOW], sandbox: true, note: "send {type:'auth',token} first" }));
+      ws.data.nonce = crypto.randomUUID();
+      ws.send(JSON.stringify({ type: "hello", allow: [...ALLOW], sandbox: true, nonce: ws.data.nonce, note: "reply {type:'auth',hmac: HMAC-SHA256(token, nonce)}" }));
     },
     async message(ws, raw) {
       let msg: any;
@@ -110,8 +127,11 @@ const server = Bun.serve<Conn, {}>({
       const d = ws.data;
 
       if (msg.type === "auth") {
-        d.authed = msg.token === TOKEN;
-        return ws.send(JSON.stringify({ type: "auth", ok: d.authed, error: d.authed ? undefined : "bad token" }));
+        let ok = false;
+        if (typeof msg.hmac === "string") ok = safeEqual(msg.hmac, await hmacHex(TOKEN, d.nonce));
+        else if (typeof msg.token === "string") ok = safeEqual(msg.token, TOKEN); // legacy plaintext client
+        d.authed = ok;
+        return ws.send(JSON.stringify({ type: "auth", ok, error: ok ? undefined : "bad token" }));
       }
       if (!d.authed) return ws.send(JSON.stringify({ type: "error", error: "not authed" }));
 

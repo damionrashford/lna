@@ -1,5 +1,5 @@
-// fetch with the LNA loopback hint, plus address-space classification for http_fetch.
-import { trimUrl } from "../store";
+// fetch with the LNA loopback hint, plus address-space classification and a bridge liveness probe.
+import { trimUrl, setCap } from "../store";
 
 export function localFetch(url: string, opts: RequestInit = {}): Promise<Response> {
   try { return fetch(url, { ...opts, targetAddressSpace: "loopback" } as RequestInit); }
@@ -12,7 +12,17 @@ export async function probeReachable(): Promise<boolean> {
   catch { return false; }
 }
 
-// classify a URL's target address space for the http_fetch tool
+// ping the local bridge daemon's HTTP root and reflect its liveness in the "bridge" capability dot.
+// (The agent's real shell/filesystem run through the SDK's SandboxAgent capabilities, not this.)
+export async function probeBridge() {
+  try {
+    const res = await localFetch("http://localhost:7967/", { method: "GET" });
+    if (res.ok) { setCap("bridge", "ok", "ready · shell + filesystem"); return; }
+  } catch { /* not running */ }
+  setCap("bridge", "", "not running");
+}
+
+// classify a URL's target address space (loopback / local LAN) for LNA-hinted fetches
 export function spaceFor(url: string): "loopback" | "local" | null {
   try {
     const h = new URL(url).hostname;

@@ -63,20 +63,6 @@ export async function mirrorMem(path: string, content: string) {
   } catch { /* best-effort */ }
 }
 
-// large tool outputs are spilled to OPFS instead of the context window; model reads back with mem_read(offset,limit)
-const SPILL_CHARS = 6000; let _spillN = 0;
-export async function maybeSpill(toolName: string, output: unknown): Promise<{ text: string; spilled: { path: string; size: number } | null }> {
-  const s = typeof output === "string" ? output : JSON.stringify(output);
-  if (s.length <= SPILL_CHARS) return { text: s, spilled: null };
-  const path = "tool-outputs/" + toolName.replace(/[^a-z0-9_-]/gi, "_") + "-" + (++_spillN) + ".txt";
-  try { await opfsWriteFile(path, s); } catch { /* keep going */ }
-  const preview = s.slice(0, 1500);
-  return {
-    spilled: { path, size: s.length },
-    text: `[Large output — ${s.length} chars saved to memory as "${path}". Read specific parts with mem_read({path:"${path}", offset, limit}); don't ask for the whole thing. Preview:]\n\n${preview}\n… (${s.length - 1500} more chars)`,
-  };
-}
-
 function updateFsUI() {
   set({ fsName: fsName() });
   setCap("files", fsRoot ? "ok" : "", fsRoot ? "granted" : "opt-in");
