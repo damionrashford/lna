@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Network Access — the complete surface</title>
+<meta name="description" content="The complete Local Network Access (LNA) surface in one reading order: the attack it stops, the address-space model, the permission machinery, the API, the caveats, the Chrome rollout timeline, and how to prepare your site.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Studio · genre: modern-minimal · macrostructure: Narrative Workflow · theme: Quiet · enrichment: none · nav: N5 · footer: Ft2 · tone: technical */
+:root{
+  --paper: oklch(98.6% 0.002 250);
+  --surface: oklch(96.4% 0.003 250);
+  --ink: oklch(23% 0.012 255);
+  --ink-muted: oklch(44% 0.012 255);
+  --border: oklch(89% 0.005 250);
+  --border-strong: oklch(80% 0.006 250);
+  --accent: oklch(46% 0.15 258);
+  --accent-ink: oklch(38% 0.14 258);
+  --space-local: oklch(50% 0.12 65);
+  --space-local-bg: oklch(95.5% 0.025 75);
+  --space-loopback: oklch(46% 0.14 300);
+  --space-loopback-bg: oklch(95.5% 0.02 300);
+  --space-public: oklch(43% 0.1 200);
+  --space-public-bg: oklch(95.5% 0.02 200);
+  --code-bg: oklch(96.6% 0.004 250);
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --u: 8px;
+  --maxw: 1080px;
+  --prose: 720px;
+  --r-sm: 6px; --r-md: 10px; --r-pill: 999px;
+  /* type scale 1.25 */
+  --t-sm: 0.8125rem; --t-base: 1rem; --t-lg: 1.25rem; --t-xl: 1.5625rem; --t-2xl: 2.44rem; --t-display: clamp(2.6rem, 5vw + .6rem, 4.4rem);
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} }
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--font-sans); font-size:var(--t-base); line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-ink); text-decoration-thickness:1px; text-underline-offset:3px}
+a:hover{color:var(--accent)}
+a:focus-visible, button:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+code, pre{font-family:var(--font-mono); font-size:0.875em}
+code{background:var(--code-bg); border:1px solid var(--border); border-radius:var(--r-sm); padding:1px 5px; white-space:nowrap}
+pre{background:var(--code-bg); border:1px solid var(--border); border-radius:var(--r-md); padding:calc(var(--u)*2.5); overflow-x:auto; line-height:1.6}
+pre code{background:none;border:none;padding:0;white-space:pre}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 calc(var(--u)*3)}
+
+/* N5 floating pill nav */
+.nav{position:fixed; top:calc(var(--u)*2); left:50%; transform:translateX(-50%); z-index:50;
+  display:flex; gap:2px; align-items:center;
+  background:color-mix(in oklch, var(--paper) 88%, transparent); backdrop-filter:blur(10px);
+  border:1px solid var(--border); border-radius:var(--r-pill);
+  padding:4px 6px; box-shadow:0 4px 20px oklch(20% 0.01 255 / 0.07);
+  max-width:calc(100vw - 24px); overflow-x:auto; scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav a{font-family:var(--font-mono); font-size:0.72rem; font-weight:500; color:var(--ink-muted);
+  text-decoration:none; padding:6px 10px; border-radius:var(--r-pill); white-space:nowrap}
+.nav a:hover{color:var(--ink); background:var(--surface)}
+.nav a.mark{color:var(--ink); font-weight:600}
+
+/* hero — two-column: title left, lede right */
+.hero{padding:calc(var(--u)*22) 0 calc(var(--u)*10)}
+.hero-grid{display:grid; grid-template-columns:1.1fr 0.9fr; gap:calc(var(--u)*8); align-items:end}
+@media (max-width:860px){ .hero-grid{grid-template-columns:1fr; gap:calc(var(--u)*4)} }
+.kicker{font-family:var(--font-mono); font-size:var(--t-sm); font-weight:500; color:var(--ink-muted); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:calc(var(--u)*2)}
+h1{font-size:var(--t-display); font-weight:700; letter-spacing:-0.03em; line-height:1.02}
+.lede{font-size:var(--t-lg); color:var(--ink-muted); line-height:1.55}
+.lede strong{color:var(--ink); font-weight:600}
+.chips{display:flex; flex-wrap:wrap; gap:calc(var(--u)*1); margin-top:calc(var(--u)*4)}
+.chip{font-family:var(--font-mono); font-size:0.72rem; font-weight:500; border:1px solid var(--border-strong);
+  border-radius:var(--r-pill); padding:5px 12px; color:var(--ink-muted); background:var(--paper)}
+.chip b{color:var(--ink); font-weight:600}
+
+/* stage sections — Narrative Workflow */
+.stage{padding:calc(var(--u)*10) 0 calc(var(--u)*4); scroll-margin-top:calc(var(--u)*10)}
+.stage-rule{display:flex; align-items:baseline; gap:calc(var(--u)*3); border-top:3px solid var(--ink); padding-top:calc(var(--u)*2.5); margin-bottom:calc(var(--u)*5)}
+.stage-num{font-family:var(--font-mono); font-size:var(--t-2xl); font-weight:600; letter-spacing:-0.02em; line-height:1}
+.stage-title{font-size:var(--t-xl); font-weight:700; letter-spacing:-0.02em}
+.stage-what{margin-left:auto; font-family:var(--font-mono); font-size:0.72rem; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; display:none}
+@media (min-width:760px){ .stage-what{display:block} }
+.prose{max-width:var(--prose)}
+.prose p, .prose ul, .prose ol, .prose pre, .prose table{margin-bottom:calc(var(--u)*2.5)}
+.prose h3{font-size:var(--t-lg); font-weight:600; letter-spacing:-0.01em; margin:calc(var(--u)*5) 0 calc(var(--u)*2)}
+.prose ul, .prose ol{padding-left:calc(var(--u)*3)}
+.prose li{margin-bottom:calc(var(--u)*1)}
+.prose li::marker{color:var(--ink-muted)}
+.muted{color:var(--ink-muted)}
+.small{font-size:var(--t-sm)}
+
+/* cards / callouts */
+.note{border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--r-sm);
+  background:var(--surface); padding:calc(var(--u)*2) calc(var(--u)*2.5); font-size:var(--t-sm); color:var(--ink-muted)}
+.note b{color:var(--ink)}
+.cards{display:grid; grid-template-columns:repeat(3,1fr); gap:calc(var(--u)*2); margin:calc(var(--u)*3) 0}
+@media (max-width:760px){ .cards{grid-template-columns:1fr} }
+.card{border:1px solid var(--border); border-radius:var(--r-md); padding:calc(var(--u)*2.5); background:var(--paper)}
+.card h4{font-size:var(--t-base); font-weight:600; margin-bottom:var(--u)}
+.card p{font-size:var(--t-sm); color:var(--ink-muted); line-height:1.55}
+.card .tag{display:inline-block; font-family:var(--font-mono); font-size:0.7rem; font-weight:600;
+  border-radius:var(--r-pill); padding:2px 10px; margin-bottom:calc(var(--u)*1.5)}
+.tag.local{color:var(--space-local); background:var(--space-local-bg)}
+.tag.loopback{color:var(--space-loopback); background:var(--space-loopback-bg)}
+.tag.public{color:var(--space-public); background:var(--space-public-bg)}
+
+/* tables */
+table{width:100%; border-collapse:collapse; font-size:var(--t-sm)}
+th{font-family:var(--font-mono); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em;
+  color:var(--ink-muted); font-weight:600; text-align:left; padding:calc(var(--u)*1) calc(var(--u)*1.5); border-bottom:2px solid var(--ink)}
+td{padding:calc(var(--u)*1) calc(var(--u)*1.5); border-bottom:1px solid var(--border); vertical-align:top}
+td code{font-size:0.8rem}
+.pill{font-family:var(--font-mono); font-size:0.7rem; font-weight:600; border-radius:var(--r-pill); padding:2px 10px; white-space:nowrap}
+.pill.local{color:var(--space-local); background:var(--space-local-bg)}
+.pill.loopback{color:var(--space-loopback); background:var(--space-loopback-bg)}
+.pill.public{color:var(--space-public); background:var(--space-public-bg)}
+.tablewrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:calc(var(--u)*2.5)}
+.tablewrap table{margin:0}
+.tablewrap td, .tablewrap th{padding:calc(var(--u)*1.25) calc(var(--u)*2)}
+.tablewrap tr:last-child td{border-bottom:none}
+
+/* checklist */
+.check{list-style:none; padding:0; counter-reset:step}
+.check li{counter-increment:step; display:grid; grid-template-columns:auto 1fr; gap:calc(var(--u)*2);
+  padding:calc(var(--u)*2.5) 0; border-bottom:1px solid var(--border); margin:0}
+.check li::before{content:counter(step, decimal-leading-zero); font-family:var(--font-mono);
+  font-size:var(--t-sm); font-weight:600; color:var(--accent-ink); padding-top:2px}
+.check b{display:block; font-weight:600; margin-bottom:2px}
+.check p{font-size:var(--t-sm); color:var(--ink-muted); margin:0}
+
+/* CTA + footer */
+.cta{margin:calc(var(--u)*6) 0 0; display:flex; gap:calc(var(--u)*1.5); flex-wrap:wrap; align-items:center}
+.btn{display:inline-block; font-weight:600; font-size:var(--t-sm); text-decoration:none;
+  border-radius:var(--r-pill); padding:10px 22px; border:1px solid var(--ink)}
+.btn.primary{background:var(--ink); color:var(--paper)}
+.btn.primary:hover{background:oklch(32% 0.02 255); color:var(--paper)}
+.btn.ghost{color:var(--ink); background:transparent}
+.btn.ghost:hover{background:var(--surface); color:var(--ink)}
+.refs{padding:calc(var(--u)*8) 0 calc(var(--u)*4)}
+.refs h2{font-size:var(--t-lg); font-weight:600; margin-bottom:calc(var(--u)*3)}
+.refs ul{list-style:none; padding:0; columns:2; column-gap:calc(var(--u)*6)}
+@media (max-width:760px){ .refs ul{columns:1} }
+.refs li{font-size:var(--t-sm); margin-bottom:calc(var(--u)*1.5); break-inside:avoid}
+.refs .src{font-family:var(--font-mono); font-size:0.7rem; color:var(--ink-muted); display:block}
+footer{border-top:1px solid var(--border); padding:calc(var(--u)*3) 0 calc(var(--u)*8);
+  display:flex; gap:calc(var(--u)*2); align-items:baseline; flex-wrap:wrap;
+  font-size:var(--t-sm); color:var(--ink-muted)}
+footer .wordmark{font-family:var(--font-mono); font-weight:600; color:var(--ink)}
+
+/* sweep reveal (Narrative Workflow) */
+@media (prefers-reduced-motion: no-preference){
+  .stage .stage-rule{opacity:0; transform:translateX(-16px); transition:opacity .5s ease, transform .5s ease}
+  .stage.in .stage-rule{opacity:1; transform:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Stages">
+  <a href="#top" class="mark">LNA</a>
+  <a href="#threat">1.0</a>
+  <a href="#spaces">2.0</a>
+  <a href="#permission">3.0</a>
+  <a href="#api">4.0</a>
+  <a href="#limits">5.0</a>
+  <a href="#timeline">6.0</a>
+  <a href="#prepare">7.0</a>
+</nav>
+
+<header class="hero wrap" id="top">
+  <div class="hero-grid">
+    <div>
+      <p class="kicker">Chrome · Web platform security</p>
+      <h1>Local Network Access</h1>
+    </div>
+    <div>
+      <p class="lede">Chrome is putting a <strong>permission prompt</strong> between public websites and your local network. This page is the complete surface in one reading order — the attack it stops, the address model, the permission machinery, the API, the caveats, the timeline, and what to change in your code. Every claim links to its source.</p>
+    </div>
+  </div>
+  <div class="chips">
+    <span class="chip">Prompt ships in <b>Chrome 142</b></span>
+    <span class="chip">Opt-in flag since <b>Chrome 138</b></span>
+    <span class="chip">Spec: <b>WICG draft · 18 Jun 2026</b></span>
+    <span class="chip">Permissions: <b>local-network · loopback-network</b></span>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============================================================ 1.0 -->
+<section class="stage" id="threat">
+  <div class="stage-rule">
+    <span class="stage-num">1.0</span>
+    <h2 class="stage-title">Threat model</h2>
+    <span class="stage-what">why the browser is stepping in</span>
+  </div>
+  <div class="prose">
+    <p><a href="https://www.rfc-editor.org/rfc/rfc1918">RFC 1918</a> has separated private from public addresses for three decades, but browsers never enforced the boundary: any public website can make your browser fire requests at devices inside your network. The <a href="https://wicg.github.io/local-network-access/">Local Network Access spec</a> cites the documented consequences — <a href="https://link.springer.com/chapter/10.1007/978-3-540-77048-0_38">drive-by pharming</a>, <a href="https://331.cybersec.fun/TeamCymruSOHOPharming.pdf">SOHO router pharming</a>, and an <a href="http://malware.dontneedcoffee.com/2015/05/an-exploit-kit-dedicated-to-csrf.html">exploit kit dedicated to CSRF</a> that rewrote router DNS settings at scale.</p>
+    <h3>Why CORS doesn't stop this</h3>
+    <p>The attack request is a CORS-safelisted method with safelisted headers, so <strong>no preflight fires</strong> and the target device is never asked. The attacker doesn't need to read the response — <em>the request itself is the CSRF attack</em>. Two more realities widen the blast radius:</p>
+    <ul>
+      <li><strong>Localhost web servers</strong> are now a common way to ship desktop software, and they routinely assume protections that don't exist — see Project Zero's <a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=679">Avast "Avastium"</a> and <a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=693">Trend Micro</a> cases, where a web-reachable local endpoint meant remote code execution.</li>
+      <li><strong>Fingerprinting and tracking</strong> — sites probe your local network to identify you, including the <a href="https://localmess.github.io/">"Local Mess"</a> technique where a localhost endpoint and a remote site collude to link identities.</li>
+    </ul>
+    <p>LNA's answer: <strong>deprecate silent access</strong> and gate every public&nbsp;→&nbsp;local request behind a user permission. Chrome first tried the inverse — <a href="https://developer.chrome.com/blog/pna-on-hold">Private Network Access</a>, where the <em>device</em> had to opt in via CORS preflights — and put it on hold after rollout proved impractical. LNA replaces it, asking the <em>user</em> instead.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 2.0 -->
+<section class="stage" id="spaces">
+  <div class="stage-rule">
+    <span class="stage-num">2.0</span>
+    <h2 class="stage-title">Address spaces</h2>
+    <span class="stage-what">the model everything hangs on</span>
+  </div>
+  <div class="prose">
+    <p>Every IP address belongs to exactly one of three <strong>address spaces</strong>, defined by <a href="https://wicg.github.io/local-network-access/#ip-address-space-section">spec §2.1</a>:</p>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <span class="tag public">public</span>
+      <h4>Same target for everyone</h4>
+      <p>Reachable from anywhere on the internet — e.g. <code>104.18.27.120</code>. Everything not in the table below.</p>
+    </div>
+    <div class="card">
+      <span class="tag local">local</span>
+      <h4>Same target per network</h4>
+      <p>Meaningful only inside the current network — e.g. <code>192.168.0.1</code>. Your router, printer, NAS.</p>
+    </div>
+    <div class="card">
+      <span class="tag loopback">loopback</span>
+      <h4>Different target per device</h4>
+      <p>Only reachable on the local host — e.g. <code>127.0.0.1</code>, aka <code>localhost</code>. Software on the user's own machine.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>The spec defines a <strong>"less public"</strong> ordering: <span class="pill loopback">loopback</span> &lt; <span class="pill local">local</span> &lt; <span class="pill public">public</span>. A request that crosses <em>down</em> this ordering is what triggers LNA.</p>
+    <h3>How an address is classified</h3>
+    <p>Per the spec's algorithm: if the address is an IPv4-mapped IPv6 address (<code>::ffff:0:0/96</code>), unwrap the embedded IPv4 address first; then look it up in the non-public blocks table; anything unmatched is <span class="pill public">public</span>.</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Address block</th><th>Name</th><th>Reference</th><th>Address space</th></tr></thead>
+      <tbody>
+        <tr><td><code>127.0.0.0/8</code></td><td>IPv4 Loopback</td><td>RFC 1122</td><td><span class="pill loopback">loopback</span></td></tr>
+        <tr><td><code>10.0.0.0/8</code></td><td>Private Use</td><td>RFC 1918</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>100.64.0.0/10</code></td><td>Carrier-Grade NAT</td><td>RFC 6598</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>172.16.0.0/12</code></td><td>Private Use</td><td>RFC 1918</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>192.168.0.0/16</code></td><td>Private Use</td><td>RFC 1918</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>198.18.0.0/15</code></td><td>Benchmarking</td><td>RFC 2544</td><td><span class="pill loopback">loopback</span></td></tr>
+        <tr><td><code>169.254.0.0/16</code></td><td>Link Local</td><td>RFC 3927</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>::1/128</code></td><td>IPv6 Loopback</td><td>RFC 4291</td><td><span class="pill loopback">loopback</span></td></tr>
+        <tr><td><code>fc00::/7</code></td><td>Unique Local</td><td>RFC 4193</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>fe80::/10</code></td><td>Link-Local Unicast</td><td>RFC 4291</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>fec0::/10</code></td><td>Site-Local Unicast</td><td>RFC 3513</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>0.0.0.0/32</code></td><td>IPv4 null address</td><td>RFC 1884</td><td><span class="pill loopback">loopback</span></td></tr>
+        <tr><td><code>0.0.0.0/8</code></td><td>IPv4 null addresses</td><td>RFC 1884</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>::/128</code></td><td>IPv6 unspecified</td><td>RFC 1884</td><td><span class="pill loopback">loopback</span></td></tr>
+        <tr><td><code>2001:db8::/32</code></td><td>IPv6 documentation</td><td>RFC 3849</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>3fff::/20</code></td><td>IPv6 documentation</td><td>RFC 9637</td><td><span class="pill local">local</span></td></tr>
+        <tr><td><code>::ffff:0:0/96</code></td><td>IPv4-mapped</td><td>RFC 4291</td><td>per mapped IPv4 address</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <ul class="small muted">
+      <li>Link-local ranges (<code>169.254.0.0/16</code>, <code>fe80::/10</code>) are <em>local</em>, not loopback — a link-local address can identify the same target for every device on a link. An earlier spec draft classified them as loopback.</li>
+      <li>Naming changed from Private Network Access: PNA's <em>public / private / local</em> became LNA's <em>public / local / loopback</em>.</li>
+      <li>User agents may let administrators override block classifications — useful for IPv6 intranets whose addresses would otherwise count as public.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 3.0 -->
+<section class="stage" id="permission">
+  <div class="stage-rule">
+    <span class="stage-num">3.0</span>
+    <h2 class="stage-title">Permission model</h2>
+    <span class="stage-what">what triggers, what gates, what delegates</span>
+  </div>
+  <div class="prose">
+    <p>A <strong>local network request</strong> (<a href="https://wicg.github.io/local-network-access/#local-network-request-section">spec §2.2</a>) is any request whose target resolves to an address space <em>less public</em> than the requesting context's own space. In Chrome's first milestone that means: <span class="pill public">public</span> → <span class="pill local">local</span> and <span class="pill public">public</span> → <span class="pill loopback">loopback</span>. Requests <em>originating</em> from loopback are exempt — software on the machine is already the most privileged vantage point.</p>
+    <p>When such a request is detected, the browser <strong>prompts the user</strong>. Grant → the fetch proceeds. Deny → it fails with a network error. Permission scope is implementation-defined (per-origin at minimum) and the decision may persist to reduce prompt fatigue.</p>
+    <h3>Two permissions, one legacy alias</h3>
+    <p>The spec defines two <em>default powerful features</em>, each a policy-controlled feature with default allowlist <code>'self'</code>:</p>
+    <ul>
+      <li><code>local-network</code> — gates requests to <span class="pill local">local</span> addresses</li>
+      <li><code>loopback-network</code> — gates requests to <span class="pill loopback">loopback</span> addresses</li>
+      <li><code>local-network-access</code> — the original coarse name, kept as a backwards-compatible alias covering both</li>
+    </ul>
+    <p>Querying the alias combines the two underlying states — any <code>denied</code> wins, then any <code>allowed</code>, else <code>prompt</code> (<a href="https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access#the_local-network-access_alias">full 9-row table on MDN</a>).</p>
+    <h3>Secure contexts only</h3>
+    <p>Making local network requests is a <a href="https://wicg.github.io/local-network-access/#secure-context-restriction">powerful feature restricted to secure contexts</a>. On plain-HTTP pages, gated requests simply fail — one more reason the initiating page must be HTTPS.</p>
+    <h3>Delegating into iframes</h3>
+    <p>Cross-origin iframes get no local network access by default. Delegate with the Permissions-Policy header or the <code>allow</code> attribute:</p>
+<pre><code>Permissions-Policy: local-network=(self "https://example.com")
+
+&lt;iframe src="https://example.com/setup" allow="local-network"&gt;&lt;/iframe&gt;</code></pre>
+    <p>The embedded document's request is treated as if the <strong>embedding</strong> document asked — the user's decision binds to the top-level origin. If the iframe navigates across origins that also need access, list every origin, or use <code>allow="local-network *"</code> for redirect chains (SSO flows that bounce before returning to <code>localhost</code>).</p>
+    <h3>The CSP escape hatch</h3>
+    <p>A document served <em>from</em> the local network can voluntarily drop its privilege with the non-standard CSP directive <code>treat-as-public-address</code> — it is then treated as public for LNA purposes. Ignored in report-only mode and in <code>&lt;meta&gt;</code>.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 4.0 -->
+<section class="stage" id="api">
+  <div class="stage-rule">
+    <span class="stage-num">4.0</span>
+    <h2 class="stage-title">API surface</h2>
+    <span class="stage-what">what you actually write</span>
+  </div>
+  <div class="prose">
+    <h3>The fetch extension</h3>
+    <p>LNA adds one enum and one option to Fetch (<a href="https://wicg.github.io/local-network-access/#fetch-api">spec §3.1.2</a>):</p>
+<pre><code>enum IPAddressSpace { "public", "local", "loopback" };
+
+partial dictionary RequestInit {
+  IPAddressSpace targetAddressSpace;
+};
+
+partial interface Request {
+  readonly attribute IPAddressSpace targetAddressSpace;  // "unknown" if unset
+};</code></pre>
+    <h3>Mixed content, relaxed — deliberately</h3>
+    <p>Local devices largely can't get publicly-trusted TLS certificates, so requiring HTTPS pages <em>and</em> blocking HTTP subrequests would strand them. LNA therefore exempts a request from mixed-content blocking when the browser can tell it's local <strong>before DNS resolution</strong>:</p>
+<pre><code>// 1 — private IP literal: exempt
+fetch("http://192.168.0.1/ping");
+
+// 2 — .local domain: exempt
+fetch("http://router.local/ping");
+
+// 3 — public hostname: NOT exempt, even if it resolves locally
+fetch("http://example.com/ping");
+
+// 4 — explicit annotation: exempt
+fetch("http://example.com/ping", { targetAddressSpace: "local" });</code></pre>
+    <p>Case 4 is the one to remember: hostnames like <code>http://internal.example.com</code> that resolve to private addresses need the annotation. It can't be abused as a general mixed-content bypass — if the connection's resolved IP isn't in the declared address space, <strong>the request fails</strong>.</p>
+    <h3>Checking before you fetch</h3>
+<pre><code>const status = await navigator.permissions.query({ name: "local-network" });
+// status.state → "granted" | "prompt" | "denied"
+
+const req = new Request("http://localhost:8888", {
+  method: "get",
+  mode: "cors",
+  targetAddressSpace: "loopback",
+});
+fetch(req);</code></pre>
+    <h3>Everything else that's gated</h3>
+    <ul>
+      <li><strong>Subresources and iframe navigations</strong> — gated today. Main-frame navigations are not (yet); the spec notes popups may deserve it.</li>
+      <li><strong>WebSockets</strong> — gated via the same fetch handshake; note there is <em>no</em> <code>targetAddressSpace</code> equivalent for <code>ws://</code> URLs, so no mixed-content bypass exists there.</li>
+      <li><strong>WebTransport</strong> — gated where it obtains connections through Fetch.</li>
+      <li><strong>Workers</strong> — a worker's address space comes from its script response's policy container. Service-worker fetches are checked against the worker's <em>script origin</em>; the SW <a href="https://wicg.github.io/local-network-access/#integration-with-workers">soft-update algorithm's null client</a> is a known open issue.</li>
+      <li><strong>HTTP cache</strong> — cached responses remember the IP they were loaded from, and LNA re-checks on every cache hit. A denied request caches nothing.</li>
+    </ul>
+    <p class="note"><b>Under the hood:</b> the check runs after a connection is obtained, per connection, because DNS answers change (see <a href="#limits">5.0</a>). With Happy Eyeballs, hosts with both public and private A/AAAA records can pass or fail non-deterministically.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 5.0 -->
+<section class="stage" id="limits">
+  <div class="stage-rule">
+    <span class="stage-num">5.0</span>
+    <h2 class="stage-title">Limits &amp; caveats</h2>
+    <span class="stage-what">what LNA does not solve</span>
+  </div>
+  <div class="prose">
+    <p>The spec is unusually candid about its own edges (<a href="https://wicg.github.io/local-network-access/#security-and-privacy">§5, Security &amp; Privacy</a>):</p>
+    <ul>
+      <li><strong>DNS rebinding</strong> — the check runs on the IP actually connected to, on every new connection, or an attacker could re-point a hostname at a private address after approval.</li>
+      <li><strong>Cross-network confusion</strong> — the permission isn't scoped to a network. Grant on the café Wi-Fi, and the grant follows you home: a captive-portal page left open (or restored from cache) can fire CSRF at your home devices. The spec calls network-scoped grants a possible future mitigation.</li>
+      <li><strong>Local-network attackers</strong> — Chrome's first milestone gates only <em>public→local</em>. A malicious device already on your LAN (or a captive portal) can still probe <code>localhost</code>; the spec leaves local→local and local→loopback enforcement as a future increment.</li>
+      <li><strong>Not absolution for device vendors</strong> — a router admin panel must still ship its own CSRF defenses. LNA mitigates; it doesn't solve.</li>
+      <li><strong>Cache probing &amp; poisoning</strong> — cached-subresource checks stop a public site from sniffing which private sites you've visited; DNS rebinding + plaintext HTTP can still poison caches. Partitioning limits, not eliminates, both.</li>
+      <li><strong>Proxies</strong> — proxied resources take the <em>proxy's</em> address space; a proxied document can discover it's being proxied by noticing local access works.</li>
+      <li><strong>File URLs</strong> — treated as local for now, pending implementation experience.</li>
+      <li><strong>Classification is a heuristic</strong> — an intranet on public IPs (false positive) or a VPN + home-network split (false negative) both break the two-space assumption. The spec accepts this as a pragmatic trade.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 6.0 -->
+<section class="stage" id="timeline">
+  <div class="stage-rule">
+    <span class="stage-num">6.0</span>
+    <h2 class="stage-title">Timeline</h2>
+    <span class="stage-what">where Chrome is in the rollout</span>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Milestone</th><th>What ships</th></tr></thead>
+      <tbody>
+        <tr><td><b>Before LNA</b></td><td>Private Network Access (device opt-in via CORS preflight) trialled, then <a href="https://developer.chrome.com/blog/pna-on-hold">put on hold</a>. LNA replaces it with a user permission.</td></tr>
+        <tr><td><b>Chrome 138</b></td><td>Opt-in testing: <code>chrome://flags/#local-network-access-check</code> → "Enabled (Blocking)". Covers <code>fetch()</code>, subresources, subframe navigation. <a href="https://lna-testing.notyetsecure.com/">Demo site</a> available.</td></tr>
+        <tr><td><b>Chrome 139+</b></td><td>Planned: an Origin Trial to temporarily opt out of the secure-context requirement (migration path for HTTP-dependent sites), and enterprise policies to pre-grant / pre-deny the permission for managed fleets.</td></tr>
+        <tr><td><b>Chrome 142</b></td><td>The permission prompt <a href="https://developer.chrome.com/blog/local-network-access">launches by default</a> (announced 2025-09-29, with an adoption guide).</td></tr>
+        <tr><td><b>Later</b></td><td>WebSockets (<a href="https://crbug.com/421156866">crbug/421156866</a>), WebTransport (<a href="https://crbug.com/421216834">crbug/421216834</a>), WebRTC (<a href="https://crbug.com/421223919">crbug/421223919</a>) gating; worker-triggered prompts (<a href="https://crbug.com/404887282">crbug/404887282</a>); potentially all cross-origin requests into less-public spaces.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p class="small muted">Platform context: Android, iOS, and macOS already ship an OS-level local-network permission — Chrome is bringing the same contract to the web. Spec status: Draft Community Group Report, WICG, 18 June 2026; editors Chris Thompson and Hubert Chao (Google). Firefox and Safari positions are tracked in the <a href="https://github.com/WICG/local-network-access">WICG repo</a>; MDN marks the whole surface experimental.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 7.0 -->
+<section class="stage" id="prepare">
+  <div class="stage-rule">
+    <span class="stage-num">7.0</span>
+    <h2 class="stage-title">Prepare your site</h2>
+    <span class="stage-what">the migration checklist</span>
+  </div>
+  <div class="prose">
+    <ol class="check">
+      <li><div><b>Reproduce the future, today</b><p>Set <code>chrome://flags/#local-network-access-check</code> to "Enabled (Blocking)" and walk every flow that touches a device, an intranet host, or localhost. Verify the prompt fires and the flow survives a grant.</p></div></li>
+      <li><div><b>Serve the initiating page over HTTPS</b><p>The permission only exists in secure contexts. HTTP pages lose local access entirely once LNA ships (the planned Origin Trial only buys time).</p></div></li>
+      <li><div><b>Annotate fetches to public hostnames that resolve privately</b><p>Add <code>targetAddressSpace: "local"</code> (or <code>"loopback"</code>) to those calls, or they'll die as mixed content. IP literals and <code>.local</code> names don't need it.</p></div></li>
+      <li><div><b>Delegate into iframes explicitly</b><p><code>allow="local-network"</code> on the frame, plus <code>Permissions-Policy</code> on your responses if you restrict origins. List every origin the frame navigates through.</p></div></li>
+      <li><div><b>Query before you prompt</b><p>Use <code>navigator.permissions.query({ name: "local-network" })</code> to detect a prior deny and show your own remediation UI instead of failing silently.</p></div></li>
+      <li><div><b>Mind the workers</b><p>Service-worker fetches need a prior grant to the worker's origin — trigger one local request from a document context first, until worker-initiated prompting lands.</p></div></li>
+      <li><div><b>Managed fleets: wait for the policy</b><p>Enterprise deployments will be able to pre-grant or pre-deny per site — no prompts for known-good internal tools.</p></div></li>
+      <li><div><b>Report what breaks</b><p>File at the <a href="https://issues.chromium.org/u/1/issues/new?component=1456234&template=0">Chromium tracker</a> or the <a href="https://github.com/WICG/local-network-access/issues/new">spec repo</a> — the Chrome team is explicitly asking for real-world use cases.</p></div></li>
+    </ol>
+    <div class="cta">
+      <a class="btn primary" href="https://lna-testing.notyetsecure.com/">Try the official test site →</a>
+      <a class="btn ghost" href="#threat">Start at 1.0</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ refs -->
+<section class="refs" id="sources">
+  <h2>Sources</h2>
+  <ul>
+    <li><a href="https://wicg.github.io/local-network-access/">Local Network Access — Draft Community Group Report</a><span class="src">wicg.github.io · 18 Jun 2026</span></li>
+    <li><a href="https://developer.chrome.com/blog/local-network-access">New permission prompt for Local Network Access</a><span class="src">developer.chrome.com · 9 Jun 2025, updated 29 Sep 2025</span></li>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access">Local network access — Security defenses guide</a><span class="src">developer.mozilla.org</span></li>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Request/targetAddressSpace">Request.targetAddressSpace</a><span class="src">developer.mozilla.org</span></li>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy/local-network">Permissions-Policy: local-network / loopback-network / local-network-access</a><span class="src">developer.mozilla.org</span></li>
+    <li><a href="https://github.com/WICG/local-network-access">WICG/local-network-access</a><span class="src">github.com — explainer, issues</span></li>
+    <li><a href="https://developer.chrome.com/blog/pna-on-hold">Private Network Access on hold</a><span class="src">developer.chrome.com — the predecessor</span></li>
+    <li><a href="https://docs.google.com/document/d/1QQkqehw8umtAgz5z0um7THx-aoU251p705FbIQjDuGs/edit?usp=sharing">LNA explainer document</a><span class="src">docs.google.com</span></li>
+  </ul>
+</section>
+
+<footer>
+  <span class="wordmark">LNA</span>
+  <span>The complete Local Network Access surface, sourced from the spec, Chrome, and MDN.</span>
+  <span style="margin-left:auto">Unofficial reference · not affiliated with Google or Mozilla</span>
+</footer>
+
+</main>
+
+<script>
+// sweep reveal per stage; no-ops under prefers-reduced-motion (CSS gates the transition)
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+}, { threshold: 0.15 });
+document.querySelectorAll(".stage").forEach((s) => io.observe(s));
+</script>
+</body>
+</html>
