@@ -144,6 +144,10 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .thumb{position:relative;width:54px;height:54px;border-radius:10px;overflow:hidden;border:1px solid var(--border-hi)}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .thumb .x{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:oklch(14% 0.01 275 / 0.82);color:var(--ink);border:none;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.toolchip{align-self:flex-start;max-width:80%;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-pill);padding:6px 14px}
+.toolchip .tk{color:var(--coral);font-weight:600}
+.toolchip .ta{color:var(--ink-mid)}
+.toolchip .tr{color:var(--muted);margin-left:2px}
 
 /* settings drawer */
 .scrim{position:fixed;inset:0;background:oklch(10% 0.01 275 / 0.6);backdrop-filter:blur(3px);opacity:0;
@@ -254,13 +258,19 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
         <div id="pull-st" class="note" style="margin-top:6px"></div>
       </div>
       <div class="note">The browser triggers <code>/api/pull</code> on your machine — no terminal needed. (Setting the origin + starting Ollama still has to happen once on the machine — the browser can't launch a process.)</div></div>
+    <div class="field"><label>Agent file tools</label>
+      <div style="display:flex;align-items:center;gap:9px">
+        <button id="grant-folder" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:9px 14px;font-weight:600;font-size:0.8rem;cursor:pointer">Grant a folder</button>
+        <span class="note" style="margin:0">folder: <span id="fs-name">none</span></span>
+      </div>
+      <div class="note">Grants the agent <code>fs_list</code> · <code>fs_read</code> · <code>fs_write</code> on a folder you pick (File System Access). It always has private <code>mem_*</code> tools on OPFS. The model calls these itself — try "list the markdown files and summarize the README".</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
         <div class="cap"><span class="dot" id="cap-model-dot"></span><span class="nm">Model</span><span>Ollama over LNA</span><span class="st" id="cap-model">—</span></div>
         <div class="cap"><span class="dot" id="cap-bridge-dot"></span><span class="nm">Tools / shell</span><span>bridge daemon</span><span class="st" id="cap-bridge">—</span></div>
-        <div class="cap"><span class="dot"></span><span class="nm">Files</span><span>File System Access</span><span class="st">opt-in</span></div>
-        <div class="cap"><span class="dot"></span><span class="nm">Memory</span><span>OPFS (private)</span><span class="st">local</span></div>
+        <div class="cap"><span class="dot" id="cap-files-dot"></span><span class="nm">Files</span><span>File System Access</span><span class="st" id="cap-files">opt-in</span></div>
+        <div class="cap"><span class="dot ok"></span><span class="nm">Memory</span><span>OPFS (private)</span><span class="st">ready</span></div>
       </div>
     </div>
     <button class="ghost" id="clear-chat">Clear conversation</button>
@@ -450,7 +460,119 @@ let streaming = false;
 let attached = null;   // data URL of an image to understand
 let imageMode = false; // ✦ generate-an-image mode
 
-// text + vision chat (Responses API, streaming). Vision = attach an image → input_image parts.
+// ================= file tools: File System Access (granted folder) + OPFS (private memory) =================
+let fsRoot = null;          // granted FileSystemDirectoryHandle
+let pendingFs = null;       // restored handle awaiting a re-grant gesture
+
+function globToRe(g) {
+  let out = '', i = 0;
+  while (i < g.length) {
+    const c = g[i];
+    if (c === '*' && g[i + 1] === '*') { i += 2; if (g[i] === '/') { out += '(?:.*/)?'; i++; } else out += '.*'; }
+    else if (c === '*') { out += '[^/]*'; i++; }
+    else if (c === '?') { out += '.'; i++; }
+    else { out += ('.+^${}()|[]\\'.indexOf(c) >= 0 ? '\\' : '') + c; i++; }
+  }
+  return new RegExp('^' + out + '$');
+}
+async function* walk(dir, prefix = '') {
+  for await (const [name, h] of dir.entries()) {
+    const path = prefix ? prefix + '/' + name : name;
+    if (h.kind === 'file') yield { path, handle: h }; else yield* walk(h, path);
+  }
+}
+async function resolvePath(root, path, create = false) {
+  const parts = path.split('/').filter(Boolean); const file = parts.pop();
+  let dir = root; for (const p of parts) dir = await dir.getDirectoryHandle(p, { create });
+  return { dir, file };
+}
+const opfsRoot = () => navigator.storage.getDirectory();
+
+const TOOLS_FS = [
+  { type:'function', name:'fs_list', description:'List file paths in the granted folder matching a glob (e.g. **/*.md).', parameters:{type:'object',properties:{pattern:{type:'string'}},required:['pattern']} },
+  { type:'function', name:'fs_read', description:'Read a text file from the granted folder by relative path.', parameters:{type:'object',properties:{path:{type:'string'}},required:['path']} },
+  { type:'function', name:'fs_write', description:'Create or overwrite a text file in the granted folder.', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
+];
+const TOOLS_MEM = [
+  { type:'function', name:'mem_list', description:"List AUTOMO's private memory files (OPFS).", parameters:{type:'object',properties:{}} },
+  { type:'function', name:'mem_read', description:'Read a private memory file.', parameters:{type:'object',properties:{path:{type:'string'}},required:['path']} },
+  { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions, private to this browser).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
+];
+function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? TOOLS_FS : [])]; }
+
+async function execTool(name, a) {
+  const cap = (s) => (typeof s === 'string' ? s.slice(0, 20000) : s);
+  if (name === 'fs_list') { if (!fsRoot) return 'no folder granted'; const re = globToRe(a.pattern || '**/*'); const out = []; for await (const f of walk(fsRoot)) { if (re.test(f.path)) out.push(f.path); if (out.length >= 500) break; } return JSON.stringify(out); }
+  if (name === 'fs_read') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
+  if (name === 'fs_write') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'wrote ' + a.path; }
+  if (name === 'mem_list') { const out = []; for await (const f of walk(await opfsRoot())) out.push(f.path); return JSON.stringify(out); }
+  if (name === 'mem_read') { const { dir, file } = await resolvePath(await opfsRoot(), a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
+  if (name === 'mem_write') { const { dir, file } = await resolvePath(await opfsRoot(), a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'saved ' + a.path; }
+  return 'unknown tool: ' + name;
+}
+
+// tiny IndexedDB kv for persisting the folder handle across sessions
+function idb() { return new Promise((res, rej) => { const r = indexedDB.open('automo', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readonly'); const g = t.objectStore('kv').get(k); g.onsuccess = () => res(g.result); g.onerror = () => rej(g.error); }); }
+
+async function grantFolder() {
+  if (pendingFs) { if ((await pendingFs.requestPermission({ mode: 'readwrite' })) === 'granted') { fsRoot = pendingFs; pendingFs = null; return updateFsUI(); } }
+  try { fsRoot = await window.showDirectoryPicker({ mode: 'readwrite' }); await idbSet('fsRoot', fsRoot); updateFsUI(); } catch {}
+}
+async function restoreFolder() {
+  try { const h = await idbGet('fsRoot'); if (!h) return; if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') { fsRoot = h; } else pendingFs = h; updateFsUI(); } catch {}
+}
+function updateFsUI() {
+  if ($('#fs-name')) $('#fs-name').textContent = fsRoot ? fsRoot.name : (pendingFs ? 'click to re-grant' : 'none');
+  if ($('#cap-files')) { $('#cap-files').textContent = fsRoot ? 'granted' : 'opt-in'; $('#cap-files-dot').className = 'dot ' + (fsRoot ? 'ok' : ''); }
+}
+
+// tool-call chip in the thread
+function toolChip(name, argsStr) {
+  const el = document.createElement('div'); el.className = 'toolchip';
+  let args = ''; try { args = Object.values(JSON.parse(argsStr || '{}')).map((v) => String(v).slice(0, 40)).join(', '); } catch {}
+  el.innerHTML = `<span class="tk"></span><span class="ta"></span><span class="tr">running…</span>`;
+  el.querySelector('.tk').textContent = name; el.querySelector('.ta').textContent = args ? '· ' + args : '';
+  $('#thread').appendChild(el); scrollDown();
+  return { setResult(out) { let s = typeof out === 'string' ? out : JSON.stringify(out); try { const a = JSON.parse(s); if (Array.isArray(a)) s = a.length + ' item' + (a.length === 1 ? '' : 's'); } catch {} el.querySelector('.tr').textContent = '→ ' + s.slice(0, 60); } };
+}
+
+// one streaming turn: text → botEl, reasoning → thinking, function calls collected. Returns {text, calls}.
+async function streamTurn(model, input, tools, botEl, cursor) {
+  const body = { model, stream: true, input }; if (tools.length) body.tools = tools;
+  const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/responses', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  let text = ''; let thinking = false; const calls = {};
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true }); let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith('data:')) continue;
+      const p = line.slice(5).trim(); if (!p || p === '[DONE]') continue;
+      let ev; try { ev = JSON.parse(p); } catch { continue; }
+      const t = ev.type;
+      if (t === 'response.output_text.delta') {
+        if (thinking) { thinking = false; botEl._bubble.classList.remove('thinking'); text = ''; }
+        text += ev.delta || ''; botEl._bubble.textContent = text; botEl._bubble.appendChild(cursor); scrollDown();
+      } else if (t === 'response.reasoning_summary_text.delta' && !text) {
+        thinking = true; botEl._bubble.classList.add('thinking'); botEl._bubble.textContent = 'thinking…'; botEl._bubble.appendChild(cursor); scrollDown();
+      } else if (t === 'response.output_item.added' && ev.item?.type === 'function_call') {
+        calls[ev.item.id || ev.item.call_id] = { call_id: ev.item.call_id, name: ev.item.name, args: '' };
+      } else if (t === 'response.function_call_arguments.done') {
+        const k = (ev.item_id && calls[ev.item_id]) ? ev.item_id : Object.keys(calls).pop();
+        if (k && calls[k]) calls[k].args = ev.arguments || '';
+      } else if (t === 'response.error' || ev.error) { throw new Error(ev.error?.message || 'model error'); }
+    }
+  }
+  return { text, calls: Object.values(calls) };
+}
+
+// text + vision chat with an agentic tool loop (Responses API, streaming). Vision = attach an image.
 async function send() {
   const input = $('#input'); const text = input.value.trim();
   if (streaming) return;
@@ -467,45 +589,32 @@ async function send() {
   const current = img
     ? { role: 'user', content: [{ type: 'input_text', text: text || 'Describe this image.' }, { type: 'input_image', image_url: img }] }
     : { role: 'user', content: text };
-  const input_arr = [...messages.map(({role,content}) => ({role,content})), current];
+  const convo = [...messages.map(({role,content}) => ({role,content})), current];
   messages.push({ role: 'user', content: img ? (text ? text + ' [image]' : '[image]') : text }); // persist text only, not base64
 
+  const tools = img ? [] : buildTools(); // tools on text turns (vision turn = describe only)
   const botEl = bubble('assistant', '');
   const cursor = document.createElement('span'); cursor.className = 'cursor';
   botEl._bubble.appendChild(cursor); $('#thread').appendChild(botEl); scrollDown();
 
-  let acc = '';
+  let finalText = '';
   try {
-    const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/responses', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, stream: true, input: input_arr }),
-    });
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let thinking = false;
-    for (;;) {
-      const { value, done } = await reader.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        let ev; try { ev = JSON.parse(payload); } catch { continue; }
-        if (ev.type === 'response.output_text.delta') {
-          if (thinking) { thinking = false; botEl._bubble.classList.remove('thinking'); acc = ''; }
-          acc += ev.delta || ''; botEl._bubble.textContent = acc; botEl._bubble.appendChild(cursor); scrollDown();
-        } else if (ev.type === 'response.reasoning_summary_text.delta' && !acc) {
-          thinking = true; botEl._bubble.classList.add('thinking');
-          botEl._bubble.textContent = 'thinking…'; botEl._bubble.appendChild(cursor); scrollDown();
-        } else if (ev.type === 'response.error' || ev.error) {
-          throw new Error(ev.error?.message || 'model error');
-        }
+    for (let step = 0; step < 10; step++) {
+      const { text: out, calls } = await streamTurn(model, convo, tools, botEl, cursor);
+      if (!calls.length) { finalText = out; break; }
+      // record the model's tool calls, execute them in the browser, feed results back
+      for (const c of calls) {
+        convo.push({ type: 'function_call', call_id: c.call_id, name: c.name, arguments: c.args });
+        const chip = toolChip(c.name, c.args);
+        let output; try { output = await execTool(c.name, JSON.parse(c.args || '{}')); } catch (e) { output = 'ERROR: ' + e.message; }
+        chip.setResult(output);
+        convo.push({ type: 'function_call_output', call_id: c.call_id, output: typeof output === 'string' ? output : JSON.stringify(output) });
       }
+      $('#thread').appendChild(botEl); scrollDown(); // keep the answer bubble below the tool chips
     }
     cursor.remove(); botEl._bubble.classList.remove('thinking');
-    if (!acc) botEl._bubble.textContent = '(empty response)';
-    messages.push({ role: 'assistant', content: acc }); store.chat = messages;
+    if (!finalText) botEl._bubble.textContent = '(done)';
+    messages.push({ role: 'assistant', content: finalText }); store.chat = messages;
   } catch (err) {
     cursor.remove(); botEl._bubble.classList.add('err');
     botEl._bubble.textContent = `Couldn't reach the model (${err.message}). Check the connection in settings.`;
@@ -593,9 +702,11 @@ $('#set-vision').addEventListener('change', (e) => { store.vision = e.target.val
 $('#set-image').addEventListener('change', (e) => { store.image = e.target.value; });
 $('#pull-btn').addEventListener('click', () => pullModel($('#pull-name').value));
 $('#pull-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') pullModel(e.target.value); });
+$('#grant-folder').addEventListener('click', grantFolder);
 
 // ---- boot ----
 setStatus('', 'not connected');
+restoreFolder(); // re-attach a previously granted folder if still permitted
 </script>
 </body>
 </html>
