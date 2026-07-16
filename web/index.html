@@ -148,6 +148,12 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .toolchip .tk{color:var(--coral);font-weight:600}
 .toolchip .ta{color:var(--ink-mid)}
 .toolchip .tr{color:var(--muted);margin-left:2px}
+.mcprow{display:flex;align-items:center;gap:8px;font-size:0.8rem;padding:7px 0;border-bottom:1px solid var(--border)}
+.mcprow .ml{color:var(--ink);font-weight:600}
+.mcprow .mt{font-family:var(--mono);font-size:0.68rem;color:var(--muted);background:var(--surface-2);border-radius:var(--r-pill);padding:1px 8px}
+.mcprow .mc{margin-left:auto;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid)}
+.mcprow .mx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px}
+.mcprow .mx:hover{color:var(--err)}
 
 /* settings drawer */
 .scrim{position:fixed;inset:0;background:oklch(10% 0.01 275 / 0.6);backdrop-filter:blur(3px);opacity:0;
@@ -264,6 +270,15 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
         <span class="note" style="margin:0">folder: <span id="fs-name">none</span></span>
       </div>
       <div class="note">Grants the agent <code>fs_list</code> · <code>fs_read</code> · <code>fs_write</code> on a folder you pick (File System Access). It always has private <code>mem_*</code> tools on OPFS. The model calls these itself — try "list the markdown files and summarize the README".</div></div>
+    <div class="field"><label>MCP servers</label>
+      <div id="mcp-list"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <input id="mcp-label" placeholder="label" style="width:78px">
+        <select id="mcp-transport" style="width:78px"><option value="http">HTTP</option><option value="stdio">stdio</option></select>
+        <input id="mcp-target" placeholder="https://…/mcp   or   npx -y @modelcontextprotocol/server-everything" style="flex:1;min-width:160px">
+        <button id="mcp-add" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:0 15px;font-weight:600;font-size:0.8rem;cursor:pointer">Add</button>
+      </div>
+      <div class="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local servers). <b>stdio</b> runs the command through the bridge daemon (<code>bun servers/bridge.ts</code>) over LNA. The server's tools become the agent's tools.</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
@@ -498,10 +513,11 @@ const TOOLS_MEM = [
   { type:'function', name:'mem_read', description:'Read a private memory file.', parameters:{type:'object',properties:{path:{type:'string'}},required:['path']} },
   { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions, private to this browser).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
 ];
-function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? TOOLS_FS : [])]; }
+function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? TOOLS_FS : []), ...mcpTools()]; }
 
 async function execTool(name, a) {
   const cap = (s) => (typeof s === 'string' ? s.slice(0, 20000) : s);
+  if (mcpRegistry[name]) { const { server, tool } = mcpRegistry[name]; return cap(await mcpCall(server, tool, a)); }
   if (name === 'fs_list') { if (!fsRoot) return 'no folder granted'; const re = globToRe(a.pattern || '**/*'); const out = []; for await (const f of walk(fsRoot)) { if (re.test(f.path)) out.push(f.path); if (out.length >= 500) break; } return JSON.stringify(out); }
   if (name === 'fs_read') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
   if (name === 'fs_write') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'wrote ' + a.path; }
@@ -526,6 +542,82 @@ async function restoreFolder() {
 function updateFsUI() {
   if ($('#fs-name')) $('#fs-name').textContent = fsRoot ? fsRoot.name : (pendingFs ? 'click to re-grant' : 'none');
   if ($('#cap-files')) { $('#cap-files').textContent = fsRoot ? 'granted' : 'opt-in'; $('#cap-files-dot').className = 'dot ' + (fsRoot ? 'ok' : ''); }
+}
+
+// ================= MCP: Streamable HTTP (direct fetch) + stdio (via the LNA bridge) =================
+let mcpServers = [];
+try { mcpServers = JSON.parse(localStorage.getItem('automo.mcp') || '[]'); } catch {}
+const mcpConns = {};        // label → live stdio connection
+let mcpRegistry = {};       // model tool name → { server, tool }
+let _mcpId = 0;
+function saveMcp() { localStorage.setItem('automo.mcp', JSON.stringify(mcpServers.map((s) => ({ label: s.label, transport: s.transport, url: s.url, cmd: s.cmd, bridge: s.bridge, token: s.token })))); }
+function mcpKey(label, tool) { return ('mcp_' + label + '_' + tool).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+// Streamable HTTP transport: POST JSON-RPC; response is JSON or an SSE stream; carry Mcp-Session-Id.
+async function mcpHttp(server, msg) {
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18' };
+  if (server._sid) headers['Mcp-Session-Id'] = server._sid;
+  const res = await localFetch(server.url, { method: 'POST', headers, body: JSON.stringify(msg) });
+  const sid = res.headers.get('Mcp-Session-Id'); if (sid) server._sid = sid;
+  if (msg.id == null) return null;
+  if ((res.headers.get('Content-Type') || '').includes('text/event-stream')) {
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    for (;;) { const { value, done } = await reader.read(); if (done) break; buf += dec.decode(value, { stream: true }); let i;
+      while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line.startsWith('data:')) continue; const p = line.slice(5).trim(); if (!p) continue; let o; try { o = JSON.parse(p); } catch { continue; } if (o.id === msg.id) { reader.cancel(); if (o.error) throw new Error(o.error.message); return o.result; } } }
+    throw new Error('no response');
+  }
+  const o = await res.json(); if (o.error) throw new Error(o.error.message); return o.result;
+}
+
+// stdio transport: spawn the MCP server command through the bridge, speak JSON-RPC over stdin/stdout.
+function mcpStdio(server) {
+  const ws = new WebSocket(server.bridge || 'ws://127.0.0.1:7967/ws');
+  let buf = ''; const pending = {}; let ready = false; const queue = [];
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: server.token || 'dev' }));
+  ws.onmessage = (e) => { const m = JSON.parse(e.data);
+    if (m.type === 'auth') { const parts = server.cmd.trim().split(/\s+/); ws.send(JSON.stringify({ type: 'spawn', cmd: parts[0], args: parts.slice(1) })); }
+    else if (m.type === 'spawned') { ready = true; queue.splice(0).forEach((f) => f()); }
+    else if (m.type === 'stdout') { buf += m.data; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue; let o; try { o = JSON.parse(line); } catch { continue; } if (o.id != null && pending[o.id]) { pending[o.id](o); delete pending[o.id]; } } }
+    else if (m.type === 'error') { server.error = m.error; }
+  };
+  const send = (msg) => { const go = () => ws.send(JSON.stringify({ type: 'stdin', data: JSON.stringify(msg) + '\n' })); ready ? go() : queue.push(go); };
+  return {
+    request: (msg) => new Promise((res, rej) => { pending[msg.id] = (o) => o.error ? rej(new Error(o.error.message)) : res(o.result); send(msg); setTimeout(() => { if (pending[msg.id]) { delete pending[msg.id]; rej(new Error('timeout')); } }, 60000); }),
+    notify: (msg) => send(msg), close: () => ws.close(),
+  };
+}
+
+async function mcpConnect(server) {
+  server.tools = []; server.error = null; server.connected = false;
+  try {
+    const init = { jsonrpc: '2.0', id: ++_mcpId, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'automo', version: '1' } } };
+    if (server.transport === 'stdio') {
+      const conn = mcpStdio(server); mcpConns[server.label] = conn;
+      await conn.request(init); conn.notify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+      server.tools = (await conn.request({ jsonrpc: '2.0', id: ++_mcpId, method: 'tools/list', params: {} })).tools || [];
+    } else {
+      await mcpHttp(server, init); await mcpHttp(server, { jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+      server.tools = (await mcpHttp(server, { jsonrpc: '2.0', id: ++_mcpId, method: 'tools/list', params: {} })).tools || [];
+    }
+    server.connected = true;
+  } catch (err) { server.error = err.message; }
+  renderMcpList();
+}
+async function mcpCall(server, tool, args) {
+  const msg = { jsonrpc: '2.0', id: ++_mcpId, method: 'tools/call', params: { name: tool, arguments: args } };
+  const r = server.transport === 'stdio' ? await mcpConns[server.label].request(msg) : await mcpHttp(server, msg);
+  const text = (r.content || []).map((c) => c.type === 'text' ? c.text : '[' + c.type + ']').join('\n');
+  return text || JSON.stringify(r);
+}
+function mcpTools() {
+  mcpRegistry = {}; const out = [];
+  for (const s of mcpServers) { if (!s.connected) continue; for (const t of (s.tools || [])) { const k = mcpKey(s.label, t.name); mcpRegistry[k] = { server: s, tool: t.name }; out.push({ type: 'function', name: k, description: '[' + s.label + '] ' + (t.description || t.name), parameters: t.inputSchema || { type: 'object', properties: {} } }); } }
+  return out;
+}
+function renderMcpList() {
+  const el = $('#mcp-list'); if (!el) return;
+  el.innerHTML = mcpServers.map((s, i) => `<div class="mcprow"><span class="dot ${s.connected ? 'ok' : (s.error ? 'err' : '')}"></span><span class="ml">${s.label}</span><span class="mt">${s.transport}</span><span class="mc">${s.connected ? (s.tools.length + ' tools') : (s.error ? 'error' : '…')}</span><button data-i="${i}" class="mx">×</button></div>`).join('') || '<div class="note" style="margin:0">none</div>';
+  el.querySelectorAll('.mx').forEach((b) => b.onclick = () => { const i = +b.dataset.i; try { mcpConns[mcpServers[i].label]?.close(); } catch {} mcpServers.splice(i, 1); saveMcp(); renderMcpList(); });
 }
 
 // tool-call chip in the thread
@@ -703,10 +795,20 @@ $('#set-image').addEventListener('change', (e) => { store.image = e.target.value
 $('#pull-btn').addEventListener('click', () => pullModel($('#pull-name').value));
 $('#pull-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') pullModel(e.target.value); });
 $('#grant-folder').addEventListener('click', grantFolder);
+$('#mcp-add').addEventListener('click', () => {
+  const label = ($('#mcp-label').value || 'mcp').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  const transport = $('#mcp-transport').value; const target = $('#mcp-target').value.trim();
+  if (!target) return;
+  const server = transport === 'http' ? { label, transport, url: target } : { label, transport, cmd: target, bridge: 'ws://127.0.0.1:7967/ws', token: 'dev' };
+  mcpServers.push(server); saveMcp(); renderMcpList(); mcpConnect(server);
+  $('#mcp-label').value = ''; $('#mcp-target').value = '';
+});
 
 // ---- boot ----
 setStatus('', 'not connected');
 restoreFolder(); // re-attach a previously granted folder if still permitted
+renderMcpList();
+mcpServers.forEach((s) => mcpConnect(s)); // reconnect saved MCP servers (tolerates failures)
 </script>
 </body>
 </html>
