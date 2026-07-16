@@ -8,8 +8,10 @@
 // the model emitting tool syntax the SDK can parse. So this is real local inference, capability-degraded.
 import type { Model, ModelRequest, ModelResponse, StreamEvent, AgentOutputItem } from "@openai/agents";
 import { Usage } from "@openai/agents";
-import { createBrowserEngine, type BrowserEngine } from "@automo/inference";
+import { createBrowserEngine, createWebllmEngine, type BrowserEngine } from "@automo/inference";
 import { logEvent } from "../../store";
+
+export type BrowserEngineKind = "transformers" | "webllm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -39,12 +41,16 @@ const assistantMsg = (text: string): AgentOutputItem =>
 
 export class BrowserModel implements Model {
   private engine: Promise<BrowserEngine> | null = null;
-  constructor(private modelName: string, private dtype = "q4f16") {}
+  // engineKind picks the in-browser runtime: "webllm" (MLC — stronger chat) or "transformers" (ONNX).
+  constructor(private modelName: string, private engineKind: BrowserEngineKind = "transformers", private dtype = "q4f16") {}
 
   private getEngine(): Promise<BrowserEngine> {
     if (!this.engine) {
-      logEvent("info", `loading in-browser model ${this.modelName} (${this.dtype}) — first run fetches weights`);
-      this.engine = createBrowserEngine(this.modelName, this.dtype).catch((e) => { this.engine = null; throw e; });
+      logEvent("info", `loading in-browser model ${this.modelName} via ${this.engineKind} — first run fetches weights`);
+      const load = this.engineKind === "webllm"
+        ? createWebllmEngine(this.modelName)
+        : createBrowserEngine(this.modelName, this.dtype);
+      this.engine = load.catch((e) => { this.engine = null; throw e; });
     }
     return this.engine;
   }

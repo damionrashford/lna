@@ -6,3 +6,4 @@ export * from "./hardware";
 export * from "./provider";
 export * from "./transformers";
 export * from "./embed";
+export * from "./webllm";

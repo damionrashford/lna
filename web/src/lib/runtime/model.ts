@@ -38,11 +38,13 @@ let currentProvider: ModelProvider | null = null; // the same provider the text 
 export function installModelProvider(model: string) {
   const p = providerFor(S.provider as any, { ollamaUrl: S.url, vllmUrl: S.vllmUrl, hfToken: S.hfToken });
   // In-browser engine: no HTTP endpoint / OpenAI client — the model provider returns a BrowserModel that
-  // runs transformers.js on WebGPU/WASM, so the SandboxAgent drives real local inference (text-only).
-  if (p.kind === "browser") {
-    const key = "browser|" + model;
+  // runs on WebGPU/WASM, so the SandboxAgent drives real local inference. `webllm` uses MLC (stronger
+  // chat); `browser` uses transformers.js (ONNX). Both are text-only (no native tool transport).
+  if (p.kind === "browser" || p.kind === "webllm") {
+    const engineKind = p.kind === "webllm" ? "webllm" : "transformers";
+    const key = p.kind + "|" + model;
     if (installedFor === key) return model;
-    currentProvider = { getModel(modelName?: string) { return new BrowserModel(modelName || model); } };
+    currentProvider = { getModel(modelName?: string) { return new BrowserModel(modelName || model, engineKind); } };
     setDefaultModelProvider(currentProvider);
     installedFor = key;
     return model;

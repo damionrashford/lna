@@ -141,7 +141,7 @@ export const S = {
   get bridgeToken() { return localStorage.getItem("automo.bridgeToken") || "dev"; },
   set bridgeToken(v: string) { localStorage.setItem("automo.bridgeToken", v || "dev"); },
   // inference backend selection
-  get provider() { return (localStorage.getItem("automo.provider") || "ollama") as "ollama" | "vllm" | "huggingface" | "browser"; },
+  get provider() { return (localStorage.getItem("automo.provider") || "ollama") as "ollama" | "vllm" | "huggingface" | "browser" | "webllm"; },
   set provider(v: string) { localStorage.setItem("automo.provider", v); },
   get vllmUrl() { return localStorage.getItem("automo.vllmUrl") || "http://localhost:8000"; },
   set vllmUrl(v: string) { localStorage.setItem("automo.vllmUrl", v); },

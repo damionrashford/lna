@@ -59,6 +59,7 @@ export default function Settings() {
               <option value="vllm">vLLM (native Responses — full capability)</option>
               <option value="huggingface">HuggingFace (remote)</option>
               <option value="browser">In-browser (transformers.js / WebGPU)</option>
+              <option value="webllm">In-browser (web-llm / MLC / WebGPU)</option>
             </select>
             {provider === "vllm" && <input type="text" spellCheck={false} placeholder="http://localhost:8000" value={vllmUrl} onChange={(e) => setVllmUrl(e.target.value)} onBlur={() => { S.vllmUrl = vllmUrl.trim(); }} style={{ marginTop: 6 }} />}
             {provider === "huggingface" && <input type="text" spellCheck={false} placeholder="hf_… token" value={hfToken} onChange={(e) => setHfToken(e.target.value)} onBlur={() => { S.hfToken = hfToken.trim(); }} style={{ marginTop: 6 }} />}

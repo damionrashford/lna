@@ -10,8 +10,9 @@
 // The router picks the best available given the hardware profile + what's configured/reachable.
 import type { HardwareProfile, ModelRecommendation } from "./hardware";
 import { recommendModel } from "./hardware";
+import { WEBLLM_MODELS } from "./webllm";
 
-export type ProviderKind = "ollama" | "vllm" | "huggingface" | "browser";
+export type ProviderKind = "ollama" | "vllm" | "huggingface" | "browser" | "webllm";
 export type FetchLike = (input: any, init?: any) => Promise<Response>;
 
 export interface InferenceProvider {
@@ -72,6 +73,16 @@ export function browserProvider(): InferenceProvider {
   };
 }
 
+// In-browser MLC/web-llm engine descriptor. Like `browser` (no HTTP endpoint) but a stronger chat
+// runtime — model ids are MLC-tagged (see @automo/inference/webllm WEBLLM_MODELS).
+export function webllmProvider(): InferenceProvider {
+  return {
+    kind: "webllm", label: "In-browser (web-llm / MLC / WebGPU)", local: true, responsesNative: false, httpEndpoint: false,
+    async probe() { return typeof navigator !== "undefined" && !!(navigator as any).gpu; },
+    async listModels() { return WEBLLM_MODELS; },
+  };
+}
+
 // Curated ONNX text-generation models that run in transformers.js (library=transformers.js on the Hub).
 export const BROWSER_MODELS = [
   "onnx-community/Qwen2.5-0.5B-Instruct",
@@ -89,6 +100,7 @@ export function providerFor(kind: ProviderKind, cfg: ProviderConfig = {}): Infer
   return kind === "vllm" ? vllmProvider(cfg)
     : kind === "huggingface" ? huggingfaceProvider(cfg)
     : kind === "browser" ? browserProvider()
+    : kind === "webllm" ? webllmProvider()
     : ollamaProvider(cfg);
 }
 
