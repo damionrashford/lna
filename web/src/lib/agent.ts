@@ -12,6 +12,7 @@ import { mcpServers } from "./mcp";
 import { BrowserSandboxClient } from "./sandbox";
 import { setActiveSandbox } from "./session-ref";
 import { webSearchTool } from "./search";
+import { agentInputGuardrails, agentOutputGuardrails } from "./guardrails";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type UIMessage = any;
@@ -177,6 +178,8 @@ export function buildAgent(modelOverride?: string): any {
     instructions: buildInstructions(),
     defaultManifest: new Manifest({ entries: {} }),
     tools: [webSearchTool],
+    inputGuardrails: agentInputGuardrails,
+    outputGuardrails: agentOutputGuardrails,
     capabilities: [
       shell(),
       filesystem(),

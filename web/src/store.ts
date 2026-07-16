@@ -101,6 +101,8 @@ export const S = {
   set image(v: string) { localStorage.setItem("automo.image", v); },
   get approve() { return localStorage.getItem("automo.approve") === "1"; },
   set approve(v: boolean) { localStorage.setItem("automo.approve", v ? "1" : "0"); },
+  get guardrails() { return localStorage.getItem("automo.guardrails") === "1"; },
+  set guardrails(v: boolean) { localStorage.setItem("automo.guardrails", v ? "1" : "0"); },
   get instructions() { return localStorage.getItem("automo.instructions") || ""; },
   set instructions(v: string) { localStorage.setItem("automo.instructions", v); },
   get budget() { return +(localStorage.getItem("automo.budget") || 16000); },

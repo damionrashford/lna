@@ -8,7 +8,7 @@
 // (via the approval registry) then resume from result.state.
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream } from "ai";
-import { run } from "@openai/agents";
+import { run, InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered } from "@openai/agents";
 import { createAiSdkUiMessageStream } from "@openai/agents-extensions/ai-sdk-ui";
 import { S } from "../store";
 import { installOllamaShim } from "./ollama";
@@ -44,6 +44,10 @@ export class LocalAgentTransport implements ChatTransport<UIMessage> {
     const opts = { sandbox: { session }, stream: true, maxTurns: 24, signal: abortSignal } as any;
 
     return createUIMessageStream({
+      onError: (e: any) =>
+        e instanceof InputGuardrailTripwireTriggered || e instanceof OutputGuardrailTripwireTriggered
+          ? `Blocked by the ${e instanceof InputGuardrailTripwireTriggered ? "input" : "output"} guardrail — a credential was detected. Turn stopped.`
+          : e?.message || "run failed",
       execute: async ({ writer }: any) => {
         let result: any = await run(agent, input as any, opts);
         writer.merge(createAiSdkUiMessageStream(result));

@@ -19,6 +19,7 @@ export default function Settings() {
   const [budget, setBudget] = useState(S.budget);
   const [compactAt, setCompactAt] = useState(S.compactAt);
   const [approve, setApprove] = useState(S.approve);
+  const [guardrails, setGuardrails] = useState(S.guardrails);
   const [pullName, setPullName] = useState("");
   const [repoSpec, setRepoSpec] = useState("");
   const [snapName, setSnapName] = useState("");
@@ -142,6 +143,9 @@ export default function Settings() {
             <input placeholder="auth token (optional, for HTTP servers)" style={{ marginTop: 6, width: "100%" }} value={mcpAuth} onChange={(e) => setMcpAuth(e.target.value)} />
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: "0.82rem", color: "var(--ink-mid)", cursor: "pointer" }}>
               <input type="checkbox" checked={approve} onChange={(e) => { setApprove(e.target.checked); S.approve = e.target.checked; }} /> Require approval before running any tool call
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: "0.82rem", color: "var(--ink-mid)", cursor: "pointer" }}>
+              <input type="checkbox" checked={guardrails} onChange={(e) => { setGuardrails(e.target.checked); S.guardrails = e.target.checked; }} /> Credential guardrails (block pasted/leaked secrets; redact tool output)
             </label>
             <div className="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local; auth + headers supported). <b>stdio</b> runs the command through the bridge daemon over LNA. Tools become the agent's tools (prefixed <code>mcp_&lt;label&gt;_</code>). Hosted MCP tools aren't listed — they route through OpenAI's Responses API and need an OpenAI model, not a local one.</div></div>
 

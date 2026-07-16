@@ -9,6 +9,7 @@ import { tool } from "@openai/agents";
 import { z } from "zod";
 import { activeSandbox } from "./session-ref";
 import { S } from "../store";
+import { noSecretsToWeb, redactToolSecrets } from "./guardrails";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -95,6 +96,8 @@ export const webSearchTool = tool({
     max_results: z.number().int().min(1).max(10).default(6).describe("how many results to return"),
   }),
   needsApproval: async () => S.approve, // human-in-the-loop when the Settings toggle is on
+  inputGuardrails: [noSecretsToWeb],    // don't send credentials to the web
+  outputGuardrails: [redactToolSecrets], // redact credentials from results
   execute: async ({ query, max_results }) => {
     const q = encodeURIComponent(query);
     const sources: [string, (h: string, n: number) => SearchResult[]][] = [
