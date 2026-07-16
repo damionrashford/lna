@@ -14,12 +14,17 @@ import { OpenAI } from "openai";
 import { S } from "../store";
 import { providerFor } from "@automo/inference";
 import { BrowserModel } from "./browser-model";
+import { spaceFor } from "./net";
 
 // Name MUST contain "ChatCompletions" to trip the SDK's transport check.
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}
 
-// fetch that carries the LNA loopback hint so requests reach localhost Ollama from a public origin
+// fetch that carries the LNA loopback hint ONLY for local addresses, so requests reach localhost Ollama
+// from a public origin. Remote endpoints (HuggingFace router) must NOT get the hint — Chrome rejects a
+// loopback-hinted request to a public host, so a always-on hint breaks the remote provider.
 const lnaFetch = ((input: any, init?: any) => {
+  const url = typeof input === "string" ? input : input?.url ?? String(input);
+  if (!spaceFor(url)) return fetch(input, init); // public host → plain fetch
   try { return fetch(input, { ...(init || {}), targetAddressSpace: "loopback" }); }
   catch { return fetch(input, init); }
 }) as any;

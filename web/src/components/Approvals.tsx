@@ -9,16 +9,35 @@ function ElicitationForm({ item }: { item: PendingItem }) {
   const required: string[] = item.schema?.required ?? [];
   const [values, setValues] = useState<Record<string, any>>(() => {
     const init: Record<string, any> = {};
-    for (const [k, p] of Object.entries(props)) init[k] = p.default ?? (p.type === "boolean" ? false : "");
+    for (const [k, p] of Object.entries(props)) {
+      if (p.type === "boolean") init[k] = p.default ?? false;
+      else if (p.type === "array") init[k] = Array.isArray(p.default) ? p.default.join("\n") : (p.default ?? "");
+      else if (p.type === "object") init[k] = p.default ? JSON.stringify(p.default, null, 2) : "";
+      else init[k] = p.default ?? "";
+    }
     return init;
   });
   const set = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }));
+  // Coerce a form value to its schema type. MCP elicitation is spec-limited to primitives, but a
+  // non-conforming server may send array/object — parse those from a list / JSON textarea rather than
+  // shipping the raw string (or rendering nothing).
+  const coerce = (p: any, v: any) => {
+    if (v === "" || v == null) return v;
+    if (p.type === "number" || p.type === "integer") return Number(v);
+    if (p.type === "array") {
+      if (Array.isArray(v)) return v;
+      const items = String(v).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+      return p.items?.type === "number" || p.items?.type === "integer" ? items.map(Number) : items;
+    }
+    if (p.type === "object") { try { return JSON.parse(v); } catch { return v; } }
+    return v;
+  };
   const accept = () => {
     const content: Record<string, unknown> = {};
     for (const [k, p] of Object.entries(props)) {
       const v = values[k];
       if (v === "" && !required.includes(k)) continue;
-      content[k] = p.type === "number" || p.type === "integer" ? Number(v) : v;
+      content[k] = coerce(p, v);
     }
     resolveElicitation(item.id, "accept", content);
   };
@@ -38,6 +57,10 @@ function ElicitationForm({ item }: { item: PendingItem }) {
                 <select value={values[k]} onChange={(e) => set(k, e.target.value)}>
                   {enumVals.map((v, i) => <option key={v} value={v}>{(p.enumNames?.[i]) ?? String(v)}</option>)}
                 </select>
+              ) : p.type === "array" ? (
+                <textarea rows={2} value={values[k]} placeholder={p.description || "one per line, or comma-separated"} onChange={(e) => set(k, e.target.value)} />
+              ) : p.type === "object" ? (
+                <textarea rows={3} value={values[k]} placeholder={p.description || "JSON object"} onChange={(e) => set(k, e.target.value)} />
               ) : (
                 <input
                   type={p.type === "number" || p.type === "integer" ? "number" : "text"}
