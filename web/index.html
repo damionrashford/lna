@@ -593,12 +593,13 @@ const TOOLS_MEM = [
   { type:'function', name:'mem_read', description:'Read a private memory file. Use offset+limit to page through large files (e.g. spilled tool outputs) instead of loading the whole thing.', parameters:{type:'object',properties:{path:{type:'string'},offset:{type:'integer'},limit:{type:'integer'}},required:['path']} },
   { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions; mirrored to the granted folder if any).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
 ];
-function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? [...TOOLS_FS, TOOL_APPLY_PATCH] : []), ...(bridgeReady ? [TOOL_SHELL] : []), ...mcpTools()]; }
+function buildTools() { return [...TOOLS_MEM, TOOL_HTTP, ...(fsRoot ? [...TOOLS_FS, TOOL_APPLY_PATCH] : []), ...(bridgeReady ? [TOOL_SHELL] : []), ...mcpTools()]; }
 
 async function execTool(name, a) {
   const cap = (s) => (typeof s === 'string' ? s.slice(0, 20000) : s);
   if (mcpRegistry[name]) { const { server, tool } = mcpRegistry[name]; return cap(await mcpCall(server, tool, a)); }
   if (name === 'shell') return cap(await bridgeExec(a.command || ''));
+  if (name === 'http_fetch') { try { const sp = spaceFor(a.url); const opt = { method: a.method || 'GET', headers: a.headers || {}, body: a.body }; if (sp) opt.targetAddressSpace = sp; const r = await fetch(a.url, opt); return cap(`HTTP ${r.status}\n` + (await r.text())); } catch (e) { return 'fetch failed: ' + e.message; } }
   if (name === 'apply_patch') {
     if (!fsRoot) return 'no folder granted';
     if (a.operation === 'delete_file') { const { dir, file } = await resolvePath(fsRoot, a.path); await dir.removeEntry(file); return 'deleted ' + a.path; }
@@ -818,6 +819,9 @@ function bridgeExec(command) {
 }
 const TOOL_SHELL = { type: 'function', name: 'shell', description: "Run a shell command on the user's machine (bash -lc) via the local bridge. Returns stdout+stderr.", parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } };
 const TOOL_APPLY_PATCH = { type: 'function', name: 'apply_patch', description: 'Structured file edit in the granted folder: create_file, update_file (overwrite), or delete_file.', parameters: { type: 'object', properties: { operation: { type: 'string', enum: ['create_file', 'update_file', 'delete_file'] }, path: { type: 'string' }, content: { type: 'string' } }, required: ['operation', 'path'] } };
+// exposed ports / local access: reach any localhost or LAN service over LNA (or the public web)
+const TOOL_HTTP = { type: 'function', name: 'http_fetch', description: 'Make an HTTP request to a URL — including localhost / LAN services exposed on the machine (over Local Network Access) or the public web. Returns status + body.', parameters: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string' }, body: { type: 'string' }, headers: { type: 'object' } }, required: ['url'] } };
+function spaceFor(url) { try { const h = new URL(url).hostname; if (/^(localhost|127\.|\[?::1)/.test(h)) return 'loopback'; if (/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || /\.local$/.test(h)) return 'local'; } catch {} return null; }
 
 // ---- workspace: clone a GitHub repo into OPFS (the browser's gitRepo() / Manifest entry) ----
 // Materialization is concurrency-tuned (parallel download pool) like the SDK's concurrencyLimits.
