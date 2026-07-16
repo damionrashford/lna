@@ -23,5 +23,17 @@ installing; each throws a clear message at runtime until its dep is added.
 
 Build order: 0 → 1 → 4 → 6 → S → 2 → 5 → 3 (verifiable-first; #3 is the big bridge-less-mode feature).
 
-## Status
-- (filled in as pieces land)
+## Status — ALL BUILT (2026-07-16), tsc + build green
+
+- **0 webgpu merge** — `inference/hardware.ts`: `GpuInfo.maxStorageBindingMiB` + `gpuBudgetGB()`; recommendation gates on real OOM budget.
+- **1 rerank** — `inference/embed.ts` (transformers.js feature-extraction, cosine rerank + dedup); `tools/search.ts` reranks `web_search` + new `read_url` focus-passage tool; both graceful-fallback.
+- **4 web-llm** — `inference/webllm.ts` (MLC, `BrowserEngine`); `runtime/browser-model.ts` engineKind; `webllm` provider kind + Settings option.
+- **6 in-page MCP** — `mcp/shims/*` (full set: process/fs/fs-promises/crypto/url/zlib/node-zlib/buffer-global/fetch-proxy/theme-check-stub) + `build.ts` node-alias plugin + `mcp/inpage.ts` `InPageStdioTransport` + built-in `browser` server + Settings "in-page". Verified: node: specifiers resolve to shims, zero leaks.
+- **S sql.js** — `storage/sql.ts` (SQLite/WASM, kv + query, IDB-persisted). Dep-gated.
+- **2 Background Fetch** — `platform/bgfetch.ts` + SW handlers in `build.ts` (backgroundfetchsuccess → `automo-weights` cache; fetch handler serves weights to ML libs, any origin).
+- **5 PWA** — `manifest.webmanifest` gains display_override/launch_handler/share_target/file_handlers/protocol_handlers/shortcuts; `platform/pwa.ts` consumes shared/opened content → `store.intake` → composer; install-prompt capture.
+- **3 InBrowserSandboxClient** — `sandbox/inbrowser/{pyodide,fs,git,client,index}.ts`: full SDK SandboxSession over Pyodide + just-bash + isomorphic-git; editor via SDK `applyDiff`; Settings toggle; `ensureSandbox()` swaps clients.
+
+**Deps added (installed, direct):** `buffer`, `fflate` (needed by the in-page MCP shims). **Deps NOT installed (dep-gated / conditionally-externalized in build.ts, throw a friendly message until added):** `@huggingface/transformers`, `kokoro-js`, `@mlc-ai/web-llm`, `sql.js`, `isomorphic-git`, `just-bash`; Pyodide loads from CDN (no npm dep).
+
+**Not runtime-verifiable headlessly** (need a real browser + WebGPU/OPFS/SW + the optional deps installed): rerank quality, web-llm/voice inference, in-page MCP round-trip, Background Fetch, PWA install/share/file-open, and the in-browser sandbox exec/git/persist. Bundling + type-safety of all paths IS verified.
