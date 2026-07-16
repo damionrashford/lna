@@ -16,6 +16,8 @@ import { probeBridge } from "./tools";
 import { mcpServers } from "./mcp";
 import { installOllamaShim } from "./ollama";
 import { BrowserSandboxClient } from "./sandbox";
+import { setActiveSandbox } from "./session-ref";
+import { webSearchTool } from "./search";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Item = any;
@@ -29,11 +31,12 @@ async function ensureSandbox() {
   if (sandboxSession) return sandboxSession;
   sandboxClient ??= new BrowserSandboxClient();
   sandboxSession = await sandboxClient.create(new Manifest({ entries: {} }));
+  setActiveSandbox(sandboxSession); // let tools (web_search) reach the live sandbox
   return sandboxSession;
 }
 async function resetSandbox() {
   try { await sandboxSession?.close(); } catch { /* noop */ }
-  sandboxSession = null;
+  sandboxSession = null; setActiveSandbox(null);
 }
 
 // ===== Sessions: persistent multi-conversation memory (IndexedDB) =====
@@ -173,7 +176,8 @@ const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running
 - filesystem + apply_patch: read and edit files in the workspace.
 - skills: load reusable skills on demand.
 - memory: persist durable notes across sessions.
-Prefer tools over guessing. Read a file before answering questions about it. Be concise and direct.`;
+- web_search: search the web (DuckDuckGo) for current information.
+Prefer tools over guessing. Search the web for anything time-sensitive or that you're unsure of. Read a file before answering questions about it. Be concise and direct.`;
 export function buildInstructions(): string {
   const base = S.instructions.trim() || DEFAULT_INSTRUCTIONS;
   const folder = getFsRoot() ? getFsRoot().name : "none";
@@ -190,6 +194,7 @@ function buildAgent(): any {
     model,
     instructions: buildInstructions(),
     defaultManifest: new Manifest({ entries: {} }),
+    tools: [webSearchTool],
     capabilities: [
       shell(),
       filesystem(),
