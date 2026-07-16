@@ -502,6 +502,21 @@ async function resolvePath(root, path, create = false) {
   return { dir, file };
 }
 const opfsRoot = () => navigator.storage.getDirectory();
+async function opfsWriteFile(path, content) { const { dir, file } = await resolvePath(await opfsRoot(), path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(content ?? ''); await w.close(); }
+async function opfsReadFile(path) { const { dir, file } = await resolvePath(await opfsRoot(), path); return await (await (await dir.getFileHandle(file)).getFile()).text(); }
+// mirror OPFS memory into the granted folder (.automo/memory/) so it's durable + visible on disk
+async function mirrorMem(path, content) { if (!fsRoot) return; try { const { dir, file } = await resolvePath(fsRoot, '.automo/memory/' + path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(content ?? ''); await w.close(); } catch {} }
+
+// large tool outputs are spilled to OPFS instead of the context window; the model reads them back with mem_read(offset,limit)
+const SPILL_CHARS = 6000; let _spillN = 0;
+async function maybeSpill(toolName, output) {
+  const s = typeof output === 'string' ? output : JSON.stringify(output);
+  if (s.length <= SPILL_CHARS) return { text: s, spilled: null };
+  const path = 'tool-outputs/' + toolName.replace(/[^a-z0-9_-]/gi, '_') + '-' + (++_spillN) + '.txt';
+  try { await opfsWriteFile(path, s); } catch {}
+  const preview = s.slice(0, 1500);
+  return { spilled: { path, size: s.length }, text: `[Large output — ${s.length} chars saved to memory as "${path}". Read specific parts with mem_read({path:"${path}", offset, limit}); don't ask for the whole thing. Preview:]\n\n${preview}\n… (${s.length - 1500} more chars)` };
+}
 
 const TOOLS_FS = [
   { type:'function', name:'fs_list', description:'List file paths in the granted folder matching a glob (e.g. **/*.md).', parameters:{type:'object',properties:{pattern:{type:'string'}},required:['pattern']} },
@@ -510,8 +525,8 @@ const TOOLS_FS = [
 ];
 const TOOLS_MEM = [
   { type:'function', name:'mem_list', description:"List AUTOMO's private memory files (OPFS).", parameters:{type:'object',properties:{}} },
-  { type:'function', name:'mem_read', description:'Read a private memory file.', parameters:{type:'object',properties:{path:{type:'string'}},required:['path']} },
-  { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions, private to this browser).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
+  { type:'function', name:'mem_read', description:'Read a private memory file. Use offset+limit to page through large files (e.g. spilled tool outputs) instead of loading the whole thing.', parameters:{type:'object',properties:{path:{type:'string'},offset:{type:'integer'},limit:{type:'integer'}},required:['path']} },
+  { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions; mirrored to the granted folder if any).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
 ];
 function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? TOOLS_FS : []), ...mcpTools()]; }
 
@@ -522,8 +537,8 @@ async function execTool(name, a) {
   if (name === 'fs_read') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
   if (name === 'fs_write') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'wrote ' + a.path; }
   if (name === 'mem_list') { const out = []; for await (const f of walk(await opfsRoot())) out.push(f.path); return JSON.stringify(out); }
-  if (name === 'mem_read') { const { dir, file } = await resolvePath(await opfsRoot(), a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
-  if (name === 'mem_write') { const { dir, file } = await resolvePath(await opfsRoot(), a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'saved ' + a.path; }
+  if (name === 'mem_read') { const full = await opfsReadFile(a.path); const off = a.offset || 0; const lim = a.limit || 8000; const slice = full.slice(off, off + lim); const more = full.length - (off + slice.length); return `[${a.path} · ${full.length} chars · showing ${off}–${off + slice.length}${more > 0 ? ` · ${more} more` : ''}]\n${slice}`; }
+  if (name === 'mem_write') { await opfsWriteFile(a.path, a.content); await mirrorMem(a.path, a.content); return 'saved ' + a.path + (fsRoot ? ' (mirrored to .automo/memory/)' : ''); }
   return 'unknown tool: ' + name;
 }
 
@@ -699,8 +714,9 @@ async function send() {
         convo.push({ type: 'function_call', call_id: c.call_id, name: c.name, arguments: c.args });
         const chip = toolChip(c.name, c.args);
         let output; try { output = await execTool(c.name, JSON.parse(c.args || '{}')); } catch (e) { output = 'ERROR: ' + e.message; }
-        chip.setResult(output);
-        convo.push({ type: 'function_call_output', call_id: c.call_id, output: typeof output === 'string' ? output : JSON.stringify(output) });
+        const spill = await maybeSpill(c.name, output); // big/MCP outputs → OPFS, model reads back with mem_read
+        chip.setResult(spill.spilled ? `${Math.round(spill.spilled.size / 1000)} kB → ${spill.spilled.path}` : output);
+        convo.push({ type: 'function_call_output', call_id: c.call_id, output: spill.text });
       }
       $('#thread').appendChild(botEl); scrollDown(); // keep the answer bubble below the tool chips
     }
