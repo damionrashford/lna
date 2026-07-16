@@ -364,9 +364,15 @@ async function probe(url, space, method = "GET") {
     return { v: "pass", detail: `HTTP ${res.status} · ${ms}ms` };
   } catch (err) {
     const ms = Math.round(performance.now() - t0);
-    const blocked = /mixed|insecure|blocked|permission/i.test(err.message);
-    log(`${blocked ? "BLOCKED" : "FAIL"}  ${method} ${url} [${space || "unset"}] → ${err.name}: ${err.message} ${ms}ms`, blocked ? "warn" : "err");
-    return { v: blocked ? "blocked" : "fail", detail: `${err.name} · ${ms}ms` };
+    // Chrome returns an opaque "Failed to fetch" for mixed-content/LNA blocks, so
+    // the message can't be trusted. Timing can: a policy block fails synchronously
+    // (~0-3ms, never hits the network) while a real network failure takes longer.
+    const httpFromHttps = /^http:\/\//i.test(url) && location.protocol === "https:";
+    const named = /mixed|insecure|blocked|permission/i.test(err.message);
+    const blocked = named || (httpFromHttps && ms < 50);
+    const why = named ? "" : blocked ? " (fast-fail from https→http ⇒ mixed-content/LNA block)" : " (network failure — endpoint down or DNS)";
+    log(`${blocked ? "BLOCKED" : "FAIL"}  ${method} ${url} [${space || "unset"}] → ${err.name}: ${err.message} ${ms}ms${why}`, blocked ? "warn" : "err");
+    return { v: blocked ? "blocked" : "fail", detail: `${blocked ? "blocked" : err.name} · ${ms}ms` };
   }
 }
 
