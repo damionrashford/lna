@@ -1,0 +1,5 @@
+# Tailwind runs through the dev server (`bun ./index.html`) via this plugin.
+# Production builds wire the same plugin through build.ts (Bun.build API),
+# because `bun build` CLI doesn't load plugins.
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

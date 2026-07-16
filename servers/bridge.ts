@@ -1,15 +1,26 @@
-// LNA stdio bridge — translates WebSocket ⇄ a child process's stdin/stdout/stderr.
-// This is the piece LNA makes reachable: a PUBLIC page opens a WS to this LOCAL
-// daemon (LNA-gated), and the daemon pipes a spawned process's stdio over that socket.
+// LNA bridge — the local sandbox host + stdio pipe that a PUBLIC page reaches over LNA.
 //
-// Run: BRIDGE_TOKEN=dev bun bridge-server.ts   (listens on 127.0.0.1:7967)
-//   optional: BRIDGE_ALLOW="bash,node,python3"  (comma-separated command allowlist)
+// Two channels over one WebSocket (127.0.0.1:7967, LNA-gated, token-gated):
+//   1. sandbox RPC  — hosts the SDK's UnixLocalSandboxClient. AUTOMO's in-browser
+//      @openai/agents SandboxAgent drives a REAL Unix sandbox on this machine: exec,
+//      apply_patch (V4A diffs), readFile/listDir, materializeEntry (manifest + gitRepo),
+//      persist/hydrate (snapshots). The browser session is a thin proxy to this.
+//   2. stdio spawn  — pipes a spawned process's stdin/stdout/stderr (stdio MCP servers).
 //
-// SECURITY: spawning is remote code execution if exposed. Two gates:
-//   1. token handshake — the client must send the token before it can spawn
-//   2. command allowlist — only these binaries may be launched
-// Bound to 127.0.0.1. If you front this with a public tunnel, keep the token secret.
+// Run: BRIDGE_TOKEN=dev bun bridge.ts   (listens on 127.0.0.1:7967)
+//   optional: BRIDGE_ALLOW="bash,node,python3"  (stdio-spawn command allowlist)
+//
+// SECURITY: this spawns processes + runs a real shell → remote code execution if exposed.
+// Gates: token handshake before any op, spawn allowlist, bound to 127.0.0.1. Front it with a
+// tunnel only if you keep the token secret. The sandbox exec is NOT allowlisted (that's the
+// point — it's the agent's shell), so the token is the whole perimeter; guard it.
+import { UnixLocalSandboxClient } from "@openai/agents/sandbox/local";
+import { Manifest } from "@openai/agents/sandbox";
 
+// rebuild a real Manifest from the browser's serialized {entries, environment} input
+const toManifest = (input: any) => (input instanceof Manifest ? input : new Manifest(input ?? { entries: {} }));
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const PORT = 7967;
 const TOKEN = Bun.env.BRIDGE_TOKEN || crypto.randomUUID();
 const ALLOW = new Set(
@@ -22,7 +33,57 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-type Conn = { authed: boolean; proc: any };
+const sandboxClient = new UnixLocalSandboxClient();
+const u8ToB64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+const b64ToU8 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
+
+type Conn = { authed: boolean; proc: any; sessions: Map<string, any> };
+
+// dispatch one sandbox RPC op against a live UnixLocalSandboxSession
+async function sandboxOp(d: Conn, msg: any): Promise<any> {
+  const { op } = msg;
+  if (op === "create") {
+    const session: any = await (sandboxClient as any).create({ manifest: toManifest(msg.manifest) });
+    const sid = crypto.randomUUID();
+    d.sessions.set(sid, session);
+    return { sid, state: serializeState(session.state) };
+  }
+  const session = d.sessions.get(msg.sid);
+  if (!session) throw new Error("no sandbox session " + msg.sid);
+  switch (op) {
+    case "exec": return await session.exec(msg.args);
+    case "execCommand": return await session.execCommand(msg.args);
+    case "writeStdin": return await session.writeStdin(msg.args);
+    case "supportsPty": return session.supportsPty?.() ?? false;
+    case "pathExists": return await session.pathExists(msg.path, msg.runAs);
+    case "readFile": { const r = await session.readFile(msg.args); return { b64: u8ToB64(r instanceof Uint8Array ? r : new TextEncoder().encode(String(r))) }; }
+    case "listDir": return await session.listDir(msg.args);
+    case "viewImage": return await session.viewImage(msg.args);
+    case "materializeEntry": { await session.materializeEntry(msg.args); return { ok: true }; }
+    case "applyManifest": { await session.applyManifest(toManifest(msg.manifest), msg.runAs); return { ok: true }; }
+    case "resolveExposedPort": return await session.resolveExposedPort(msg.port);
+    case "editorApply": {
+      const editor = session.createEditor(msg.runAs);
+      const o = msg.operation;
+      const fn = o.type === "create_file" ? editor.createFile : o.type === "delete_file" ? editor.deleteFile : editor.updateFile;
+      return (await fn.call(editor, o)) ?? { status: "completed" };
+    }
+    case "persistWorkspace": return { b64: u8ToB64(await session.persistWorkspace()) };
+    case "hydrateWorkspace": { await session.hydrateWorkspace(b64ToU8(msg.b64), msg.options); return { ok: true }; }
+    case "close": { await session.close?.(); d.sessions.delete(msg.sid); return { ok: true }; }
+    default: throw new Error("unknown sandbox op " + op);
+  }
+}
+
+// only the JSON-serializable bits the browser session needs
+function serializeState(state: any) {
+  return {
+    workspaceRootPath: state.workspaceRootPath,
+    environment: state.environment ?? {},
+    exposedPorts: state.exposedPorts ?? {},
+    workspaceReady: state.workspaceReady ?? true,
+  };
+}
 
 const server = Bun.serve<Conn, {}>({
   port: PORT,
@@ -30,21 +91,20 @@ const server = Bun.serve<Conn, {}>({
   fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
-      if (srv.upgrade(req, { data: { authed: false, proc: null } })) return;
+      if (srv.upgrade(req, { data: { authed: false, proc: null, sessions: new Map() } })) return;
       return new Response("upgrade failed", { status: 400 });
     }
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-    // /  → info + the command allowlist (never returns the token)
     return Response.json(
-      { ok: true, daemon: "lna-stdio-bridge", ws: `ws://127.0.0.1:${PORT}/ws`, allow: [...ALLOW], authRequired: true },
+      { ok: true, daemon: "lna-bridge", ws: `ws://127.0.0.1:${PORT}/ws`, allow: [...ALLOW], sandbox: true, authRequired: true },
       { headers: { ...CORS, "Content-Type": "application/json" } },
     );
   },
   websocket: {
     open(ws) {
-      ws.send(JSON.stringify({ type: "hello", allow: [...ALLOW], note: "send {type:'auth',token} first" }));
+      ws.send(JSON.stringify({ type: "hello", allow: [...ALLOW], sandbox: true, note: "send {type:'auth',token} first" }));
     },
-    message(ws, raw) {
+    async message(ws, raw) {
       let msg: any;
       try { msg = JSON.parse(String(raw)); } catch { return ws.send(JSON.stringify({ type: "error", error: "bad json" })); }
       const d = ws.data;
@@ -55,6 +115,14 @@ const server = Bun.serve<Conn, {}>({
       }
       if (!d.authed) return ws.send(JSON.stringify({ type: "error", error: "not authed" }));
 
+      // ---- sandbox RPC (request/response, correlated by msg.id) ----
+      if (msg.type === "sb") {
+        try { const result = await sandboxOp(d, msg); ws.send(JSON.stringify({ type: "sb", id: msg.id, ok: true, result })); }
+        catch (err: any) { ws.send(JSON.stringify({ type: "sb", id: msg.id, ok: false, error: err?.message || String(err) })); }
+        return;
+      }
+
+      // ---- stdio spawn (streaming, for stdio MCP servers) ----
       if (msg.type === "spawn") {
         if (d.proc) return ws.send(JSON.stringify({ type: "error", error: "already spawned" }));
         const cmd = msg.cmd;
@@ -78,13 +146,14 @@ const server = Bun.serve<Conn, {}>({
         d.proc.stdin.flush?.();
         return;
       }
-      if (msg.type === "kill") {
-        if (d.proc) d.proc.kill();
-        return;
-      }
+      if (msg.type === "kill") { if (d.proc) d.proc.kill(); return; }
       ws.send(JSON.stringify({ type: "error", error: `unknown type "${msg.type}"` }));
     },
-    close(ws) { if (ws.data.proc) ws.data.proc.kill(); },
+    close(ws) {
+      if (ws.data.proc) ws.data.proc.kill();
+      for (const s of ws.data.sessions.values()) { try { s.close?.(); } catch { /* noop */ } }
+      ws.data.sessions.clear();
+    },
   },
 });
 
@@ -93,8 +162,8 @@ async function pump(stream: ReadableStream<Uint8Array>, onChunk: (s: string) => 
   for await (const chunk of stream) onChunk(dec.decode(chunk));
 }
 
-console.log(`lna stdio bridge → ws://127.0.0.1:${PORT}/ws`);
+console.log(`lna bridge → ws://127.0.0.1:${PORT}/ws  (sandbox host + stdio pipe)`);
 console.log(`  token: ${TOKEN}`);
-console.log(`  allow: ${[...ALLOW].join(", ")}`);
+console.log(`  spawn allow: ${[...ALLOW].join(", ")}`);
 
-export {};
+export { server };

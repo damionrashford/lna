@@ -5,5 +5,8 @@
   "description": "The local bridge daemon reachable over LNA — spawns processes + stdio MCP servers for AUTOMO",
   "scripts": {
     "bridge": "bun bridge.ts"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.13.4"
   }
 }
