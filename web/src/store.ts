@@ -14,6 +14,7 @@ export type LogEntry = { t: number; level: "info" | "warn" | "error"; msg: strin
 export type Usage = { requests: number; input: number; output: number; total: number };
 export type TaskInfo = { server: string; tool: string; status: string; t: number };
 export type MachineInfo = { tier: string; note: string; examples: string[]; summary: string };
+export type VoiceState = { active: boolean; state: "idle" | "loading" | "listening" | "thinking" | "speaking" };
 
 export interface State {
   status: { state: string; text: string };
@@ -39,6 +40,7 @@ export interface State {
   debugOpen: boolean;
   tasks: TaskInfo[];
   machine: MachineInfo | null;
+  voice: VoiceState;
 }
 
 let state: State = {
@@ -69,6 +71,7 @@ let state: State = {
   debugOpen: false,
   tasks: [],
   machine: null,
+  voice: { active: false, state: "idle" },
 };
 
 const listeners = new Set<() => void>();
@@ -105,6 +108,7 @@ export function logEvent(level: LogEntry["level"], msg: string) {
 }
 export function setUsage(u: Usage | null) { set({ usage: u }); }
 export function setMachine(m: MachineInfo | null) { set({ machine: m }); }
+export function setVoice(v: VoiceState) { set({ voice: v }); }
 
 // upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
 export function updateTask(server: string, tool: string, status: string) {

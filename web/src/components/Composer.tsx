@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore, S } from "../store";
 import { setAttachment, clearAttachment, toggleImageMode } from "../lib/agent";
+import { startVoice, stopVoice } from "../lib/voice";
 import { useAutomoChat } from "../chat";
 
 function fileToDataURL(file: File): Promise<string> {
@@ -8,7 +9,8 @@ function fileToDataURL(file: File): Promise<string> {
 }
 
 export default function Composer() {
-  const { attached, imageMode } = useStore();
+  const { attached, imageMode, voice } = useStore();
+  const toggleVoice = () => { if (voice.active) void stopVoice(); else void startVoice(); };
   const { busy, sendText, sendImage, generateImage, stop } = useAutomoChat();
   const [value, setValue] = useState("");
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -57,6 +59,14 @@ export default function Composer() {
         </button>
         <button className={"cbtn" + (imageMode ? " on" : "")} title="Image generation mode" aria-label="Image mode" onClick={toggleImageMode}>
           <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+        </button>
+        <button
+          className={"cbtn" + (voice.active ? " on" : "")}
+          title={voice.active ? `Voice: ${voice.state} — click to stop` : "Talk to AUTOMO (local voice)"}
+          aria-label="Voice mode"
+          onClick={toggleVoice}
+        >
+          <svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v4" /></svg>
         </button>
         <textarea
           ref={ta}

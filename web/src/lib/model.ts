@@ -9,7 +9,7 @@
 //
 // The OpenAI client is pointed at the user's local Ollama and fetches over LNA (loopback),
 // so the browser page reaches the model on the machine.
-import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient } from "@openai/agents";
+import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient, type Model, type ModelProvider } from "@openai/agents";
 import { OpenAI } from "openai";
 import { S } from "../store";
 import { providerFor } from "@automo/inference";
@@ -30,6 +30,7 @@ const lnaFetch = ((input: any, init?: any) => {
 }) as any;
 
 let installedFor = "";
+let currentProvider: ModelProvider | null = null; // the same provider the text agent resolves models through
 // Install the OpenAI client + model provider for the SELECTED inference backend. vLLM implements the
 // native Responses transport, so it gets the real OpenAIResponsesModel (native apply_patch + server
 // compaction — the full capability set). Ollama / HuggingFace / anything non-native gets the
@@ -41,7 +42,8 @@ export function installModelProvider(model: string) {
   if (p.kind === "browser") {
     const key = "browser|" + model;
     if (installedFor === key) return model;
-    setDefaultModelProvider({ getModel(modelName?: string) { return new BrowserModel(modelName || model); } });
+    currentProvider = { getModel(modelName?: string) { return new BrowserModel(modelName || model); } };
+    setDefaultModelProvider(currentProvider);
     installedFor = key;
     return model;
   }
@@ -52,13 +54,14 @@ export function installModelProvider(model: string) {
   const client = new OpenAI({ baseURL, apiKey, dangerouslyAllowBrowser: true, fetch: lnaFetch });
   setDefaultOpenAIClient(client as any);
   const native = p.responsesNative;
-  setDefaultModelProvider({
+  currentProvider = {
     getModel(modelName?: string) {
       return native
         ? new OpenAIResponsesModel(client as any, modelName || model)
         : new ChatCompletionsResponsesModel(client as any, modelName || model);
     },
-  });
+  };
+  setDefaultModelProvider(currentProvider);
   if (!native) {
     // sanity: the shim name must trip the SDK check or the fallback is a no-op
     const probe = new ChatCompletionsResponsesModel(client as any, model);
@@ -66,4 +69,12 @@ export function installModelProvider(model: string) {
   }
   installedFor = key;
   return model;
+}
+
+// Resolve the SAME provider-aware SDK Model the text agent uses (Ollama shim / vLLM native / Browser).
+// The voice transport drives its turns through this — one brain, not a parallel chat implementation.
+export async function resolveBrainModel(name?: string): Promise<Model> {
+  const model = installModelProvider(name || S.model);
+  if (!currentProvider) throw new Error("model provider not installed");
+  return currentProvider.getModel(name || model);
 }
