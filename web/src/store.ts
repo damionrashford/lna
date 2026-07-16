@@ -153,6 +153,10 @@ export const S = {
   set vllmUrl(v: string) { localStorage.setItem("automo.vllmUrl", v); },
   get hfToken() { return localStorage.getItem("automo.hfToken") || ""; },
   set hfToken(v: string) { localStorage.setItem("automo.hfToken", v); },
+  // sandbox backend: "bridge" (real Unix on your machine via the daemon) or "inbrowser" (Pyodide +
+  // just-bash + isomorphic-git in the page — zero install, sandboxed, can't touch real host files).
+  get sandbox() { return (localStorage.getItem("automo.sandbox") || "bridge") as "bridge" | "inbrowser"; },
+  set sandbox(v: string) { localStorage.setItem("automo.sandbox", v); },
 };
 
 export const trimUrl = () => S.url.replace(/\/$/, "");

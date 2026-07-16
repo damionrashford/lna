@@ -2,7 +2,7 @@
 // (persisted as AI SDK UIMessages), workspace snapshots, composer state, and boot. Model building and
 // connection live in ./build and ./connect (re-exported here so `from "./agent"` stays the entry point).
 import { Manifest, gitRepo } from "@openai/agents/sandbox";
-import { S, set, getState, setStatus, setMachine } from "../../store";
+import { S, set, getState, setStatus, setMachine, setCap } from "../../store";
 import { detectHardware, recommendModel, recommendFromBridge, bridgeSummary } from "@automo/inference";
 import { probeBridgeHardware } from "../net/index";
 import { idbGet, idbSet } from "../storage/idb";
@@ -20,13 +20,20 @@ export * from "./connect";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type UIMessage = any;
 
-// the live sandbox for the current conversation — one real Unix workspace, reused across turns
-let sandboxClient: BrowserSandboxClient | null = null;
+// the live sandbox for the current conversation — one workspace, reused across turns. Two backends:
+// the bridge (real Unix on the machine) or the in-browser Pyodide sandbox (zero-install, sandboxed).
+let sandboxClient: any = null;
 let sandboxSession: any = null;
 export async function ensureSandbox() {
   if (sandboxSession) return sandboxSession;
   if (!(await acquireSandboxLock())) throw new Error("Another AUTOMO tab is driving the sandbox — use that tab, or close it and retry.");
-  sandboxClient ??= new BrowserSandboxClient("ws://127.0.0.1:7967/ws", S.bridgeToken);
+  if (S.sandbox === "inbrowser") {
+    const { InBrowserSandboxClient } = await import("../sandbox/inbrowser/index");
+    sandboxClient = new InBrowserSandboxClient();
+    setCap("bridge", "ok", "in-browser sandbox (Pyodide)");
+  } else {
+    sandboxClient = new BrowserSandboxClient("ws://127.0.0.1:7967/ws", S.bridgeToken);
+  }
   sandboxSession = await sandboxClient.create(new Manifest({ entries: {} }));
   const sid = getState().sessionId; // restore this conversation's durable workspace, if cached
   if (sid) await hydrateWorkspaceFromCache(sid, sandboxSession);

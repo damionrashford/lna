@@ -18,6 +18,7 @@ export default function Settings() {
   const [instructions, setInstructions] = useState(S.instructions);
   const [bridgeToken, setBridgeToken] = useState(S.bridgeToken);
   const [provider, setProvider] = useState<string>(S.provider);
+  const [sandbox, setSandbox] = useState<string>(S.sandbox);
   const [vllmUrl, setVllmUrl] = useState(S.vllmUrl);
   const [hfToken, setHfToken] = useState(S.hfToken);
   const [approve, setApprove] = useState(S.approve);
@@ -64,6 +65,13 @@ export default function Settings() {
             {provider === "vllm" && <input type="text" spellCheck={false} placeholder="http://localhost:8000" value={vllmUrl} onChange={(e) => setVllmUrl(e.target.value)} onBlur={() => { S.vllmUrl = vllmUrl.trim(); }} style={{ marginTop: 6 }} />}
             {provider === "huggingface" && <input type="text" spellCheck={false} placeholder="hf_… token" value={hfToken} onChange={(e) => setHfToken(e.target.value)} onBlur={() => { S.hfToken = hfToken.trim(); }} style={{ marginTop: 6 }} />}
             <div className="note"><b>vLLM</b> unlocks native <code>apply_patch</code> + compaction (no shim). Ollama/HF fall back to function tools. In-browser is generation-only (no agent tools yet).</div></div>
+
+          <div className="field"><label>Sandbox backend</label>
+            <select value={sandbox} onChange={(e) => { setSandbox(e.target.value); S.sandbox = e.target.value; }}>
+              <option value="bridge">Bridge daemon (real Unix on your machine)</option>
+              <option value="inbrowser">In-browser (Pyodide + bash + git — zero install)</option>
+            </select>
+            <div className="note"><b>Bridge</b> runs real, unsandboxed commands on your machine (full power; needs <code>bun run bridge</code>). <b>In-browser</b> runs a Python + just-bash + isomorphic-git sandbox in this page over OPFS — nothing to install, but it can't touch your real files or run native binaries. Switch takes effect on the next new chat.</div></div>
 
           <div className="field"><label>Model endpoint (Ollama)</label>
             <input type="text" spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => { S.url = url.trim(); }} />

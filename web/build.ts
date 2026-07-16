@@ -69,12 +69,25 @@ const baseNoTrail = base === "/" ? "" : base.replace(/\/$/, ""); // "" | "/lna"
 const site = origin + base;                                     // https://…/lna/
 if (!origin) console.warn("⚠ could not derive SITE_ORIGIN (no CNAME, GITHUB_REPOSITORY, or git remote) — set SITE_ORIGIN");
 
+// Optional, heavy, dynamically-imported deps (in-browser ML + sandbox). Each call site is dep-gated and
+// throws a friendly message when its dep is absent. Mark the MISSING ones `external` so the bundle stays
+// green without them; once a dep is installed it drops off this list and Bun bundles it → "install to
+// enable" works. (Bun otherwise hard-errors on some unresolved const-folded dynamic specifiers.)
+const OPTIONAL_DEPS = [
+  "@huggingface/transformers", "kokoro-js", "@mlc-ai/web-llm", "sql.js",
+  "isomorphic-git", "isomorphic-git/http/web", "just-bash", "just-bash/browser",
+];
+const isInstalled = (pkg: string): boolean => { try { (Bun as any).resolveSync(pkg, import.meta.dir); return true; } catch { return false; } };
+const externalDeps = OPTIONAL_DEPS.filter((p) => !isInstalled(p));
+if (externalDeps.length) console.log(`optional deps not installed (externalized): ${externalDeps.join(", ")}`);
+
 const result = await Bun.build({
   entrypoints: ["./index.html"],
   outdir: "./dist",
   minify: true,
   sourcemap: "linked",
   publicPath: base,
+  external: externalDeps,
   plugins: [reactCompiler, tailwind, nodeShimPlugin],
 });
 if (!result.success) {
