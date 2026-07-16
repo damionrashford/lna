@@ -2,9 +2,8 @@
   "name": "@automo/servers",
   "private": true,
   "type": "module",
-  "description": "Local daemons reachable over LNA — the stdio bridge and the CORS/WS test server",
+  "description": "The local bridge daemon reachable over LNA — spawns processes + stdio MCP servers for AUTOMO",
   "scripts": {
-    "bridge": "bun bridge.ts",
-    "test": "bun test.ts"
+    "bridge": "bun bridge.ts"
   }
 }

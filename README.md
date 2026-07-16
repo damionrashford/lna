@@ -29,7 +29,7 @@ Verified against `@modelcontextprotocol/server-everything`: handshake, 13 tools 
 LNA only fires when the page is a **public** origin and the fetch target is local/loopback. Opened from `localhost` the page is itself loopback, so nothing triggers. To test:
 
 1. Enable enforcement: `chrome://flags/#local-network-access-check` → **Enabled (Blocking)** (Chrome 138–141; 142+ enforces by default).
-2. Run the daemon: `bun servers/test.ts` → serves `127.0.0.1:7966` (CORS JSON + WebSocket echo).
+2. Run the daemon: `(removed)` → serves `127.0.0.1:7966` (CORS JSON + WebSocket echo).
 3. Open the **public** test platform (the GitHub Pages URL above, or a tunnel that fronts your local build) and run the suite. Grant the prompt to watch verdicts flip.
 
 ## Sources

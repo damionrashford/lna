@@ -1,71 +1,57 @@
 # AGENTS.md — AUTOMO
 
-AUTOMO is a **local-first browser AI agent**. The UI is a static page on GitHub Pages; the "backend" is the visitor's own machine — their local model, files, shell, and MCP tools — reached over Chrome's **Local Network Access (LNA)**. The page never sends anything to a server it controls; it orchestrates *your* local compute.
+AUTOMO is a **local-first browser AI agent**. It's a static page on GitHub Pages; the "backend" is the visitor's own machine — their local model, files, shell, and MCP tools — reached over Chrome's **Local Network Access (LNA)**. The page has no server it controls; it orchestrates *your* local compute.
 
-The repo is named `lna` for historical reasons (it started as an LNA reference); the product is **AUTOMO**.
+**AUTOMO is the single agent.** The whole thing lives in one file, `web/index.html`. There is no separate agent process — the browser *is* the agent and the persistent, developer-owned sandbox.
+
+The repo is named `lna` for historical reasons (it started as an LNA reference).
 
 ## The one idea
 
-A public HTTPS page can, with one user-granted LNA permission, open a connection to `localhost` / the LAN. AUTOMO uses that to talk to a local model (Ollama) and, optionally, a local daemon that spawns processes and stdio MCP servers. **Hosted UI, local everything else.**
+A public HTTPS page can, with one user-granted LNA permission, open a connection to `localhost` / the LAN. AUTOMO uses that to talk to a local model (Ollama, Responses API) and to a small local daemon that spawns processes and stdio MCP servers. **Hosted UI, local everything else.**
 
 ## Layout (Bun workspace)
 
 ```
 lna/
-├── package.json          workspace root; scripts: serve · bridge · test-daemon · agent
-├── web/                  @automo/web — the static site (GitHub Pages, Actions-deployed)
-│   └── index.html        the AUTOMO chat app (self-contained: HTML+CSS+JS, no build)
-├── servers/              @automo/servers — local daemons reached over LNA
-│   ├── bridge.ts         WebSocket ⇄ child-process stdin/stdout; spawns shells + stdio MCP servers
-│   └── test.ts           CORS/JSON + WS echo daemon (LNA connectivity harness)
-├── agent/                @automo/agent — non-hosted OpenAI Agents JS sandbox agent
-│   ├── agent.ts          full sandbox agent (shell+filesystem+skills+memory), local Ollama
-│   ├── ollama.ts         transport shim (see below)
-│   ├── skills.ts         skills pulled from GitHub (.agents/skills)
-│   └── mounts.ts         all mount providers (local bind verified; cloud = Docker/hosted)
-├── .agents/skills/       repo-hosted skills (folders: SKILL.md + scripts/), served to the agent via GitHub
+├── package.json          workspace root; scripts: serve · bridge
+├── web/                  @automo/web — THE agent (static, GitHub Pages, Actions-deployed)
+│   └── index.html        the entire app: chat + tool loop + sessions + workspace + settings
+├── servers/              @automo/servers — the local access daemon
+│   └── bridge.ts         WebSocket ⇄ process stdin/stdout; runs bash (shell tool) + stdio MCP servers
+├── .agents/skills/       repo-hosted skills (folders) the browser can clone into its workspace
 └── .github/workflows/pages.yml   deploys web/ to Pages
 ```
 
-## Run it
+## What the agent is (all in `web/index.html`)
+
+- **Model**: local Ollama over the **Responses API** (`/v1/responses`), streaming, reasoning-aware, with vision (`input_image`) and image generation (`/v1/images/generations`).
+- **Tool loop**: streaming `function_call` → execute in-browser → `function_call_output` → continue. Optional human-in-the-loop approval per call. Large outputs spill to OPFS; the model reads them back by range.
+- **Tools**: `mem_*` (OPFS private memory, mirrored to `.automo/memory/` on a granted folder), `fs_*` + `apply_patch` (File System Access — the local-bind mount), `shell` (bash via the bridge — Unix-local exec), `http_fetch` (reach exposed localhost/LAN ports over LNA, or the web), and any **MCP** server's tools (Streamable HTTP with auth, or stdio via the bridge; filtering + prefixed names).
+- **Workspace** = OPFS (virtual FS) + the granted folder + **GitHub repos cloned into OPFS** (the `gitRepo()` equivalent, concurrency-tuned).
+- **Sessions**: persistent multi-conversation memory (IndexedDB) with the Session interface; **snapshots** save workspace + conversation; resume across reloads is automatic.
+- **Context management**: configurable system `instructions` + live run context, a context-window budget, and client-side compaction (Ollama has no `responses.compact`).
+
+## The bridge (`servers/bridge.ts`)
+
+The only local process. It spawns commands and pipes stdio over a WebSocket, so AUTOMO's `shell` tool and stdio MCP servers work. Token + command allowlist, bound to `127.0.0.1`. Not needed for chat/files/memory/HTTP-MCP — only for shell and stdio MCP.
 
 ```bash
-bun install                       # workspace install (root)
-bun run serve                     # serve web/ locally (LNA won't fire from localhost — deploy to test it)
-bun run bridge                    # BRIDGE_TOKEN=dev bun servers/bridge.ts  → 127.0.0.1:7967
-bun run test-daemon               # bun servers/test.ts                     → 127.0.0.1:7966
-bun run agent                     # the sandbox agent (needs Ollama running)
+bun run bridge        # BRIDGE_TOKEN=dev bun servers/bridge.ts → 127.0.0.1:7967
 ```
 
-The agent needs its own deps: `cd agent && bun install` is covered by the root workspace install.
+## The connection model (for chat)
 
-## The connection model (critical)
-
-For the hosted page to reach local Ollama, three things must line up — the chat UI's onboarding guides all three:
-
-1. **LNA permission** — public page → `localhost` is a loopback request; Chrome prompts, user clicks Allow. (Chrome ≥142 by default; 138–141 need `chrome://flags/#local-network-access-check` = Enabled.)
-2. **CORS** — Ollama must allow the Pages origin: `OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve`. Without it the connection is allowed but the read is blocked. This is the non-obvious step.
-3. **Ollama running + a model pulled.**
-
-The chat streams from **Ollama's Responses API** (`/v1/responses`, supported since Ollama 0.13.3) — NOT Chat Completions. It passes the whole conversation as `input` each turn (Ollama's Responses is non-stateful), parses SSE events, renders `response.output_text.delta` as the answer, and shows a `thinking…` state during `response.reasoning_summary_text.delta` (reasoning models emit heavy reasoning first).
-
-## The transport shim (`agent/ollama.ts`)
-
-The OpenAI Agents SDK gates `apply_patch` / structured-tool / memory transports on `!modelConstructorName.includes('ChatCompletions')`. A plain Responses model claims the *native* apply_patch transport, which Ollama's `/v1/responses` doesn't implement. The shim subclasses the Responses model with a name containing `ChatCompletions`, forcing the **function-tool fallback** (Ollama-compatible) while inference stays on `/v1/responses`. Installed as the default model provider so the agent AND memory's phase models use it.
+1. **LNA permission** — public page → `localhost` prompts; user clicks Allow (Chrome ≥142, or the flag on 138–141).
+2. **CORS** — Ollama must allow the origin: `OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve`. AUTOMO diagnoses this exactly (a no-cors probe distinguishes "running but blocked" from "down").
+3. **Ollama running + a model pulled** (AUTOMO can pull models in-browser via `/api/pull`).
 
 ## Conventions
 
-- **Bun**, TypeScript, ESM. No build step for `web/` — the app is one self-contained `index.html`.
-- **Non-hosted by default.** Model = local Ollama; execution = `UnixLocalSandboxClient`; nothing touches a hosted service.
-- **NO secrets in the repo.** The bridge's `BRIDGE_TOKEN` gates process spawning; keep it secret if you front the bridge with a public tunnel (a spawn endpoint reachable from a public origin is RCE).
-- **Skills are folders** (`SKILL.md` + optional `scripts/`, `references/`, `assets/`). The agent pulls them from `github.com/damionrashford/lna` `.agents/skills` on `load_skill`.
+- **Bun**, no build step. `web/index.html` is self-contained (HTML+CSS+JS) — verify UI changes with a screenshot (`cdp-headless`); the Ollama connection can't be exercised from `file://` (needs a public origin + `OLLAMA_ORIGINS`).
+- **Non-hosted by default** — the model is local; nothing touches a hosted service.
+- `servers/bridge.ts` spawns processes — never widen its allowlist or drop the token without saying so; a spawn endpoint reachable from a public origin is RCE.
 
 ## Deploy
 
-Push to `main` with changes under `web/**` → the `pages.yml` Actions workflow uploads `web/` and deploys to Pages. Live: https://damionrashford.github.io/lna/
-
-## Safety notes for agents editing this repo
-
-- Editing `web/index.html` is the app. It's static; verify with a screenshot (`cdp-headless`) — the connection to Ollama can't be exercised from `file://` (needs a public origin + `OLLAMA_ORIGINS`).
-- `servers/bridge.ts` spawns processes. Never widen its command allowlist or drop the token check without saying so explicitly.
-- The Pages deploy is public. Confirm before pushing changes to `web/`.
+Push to `main` with changes under `web/**` → `pages.yml` deploys. Live: https://damionrashford.github.io/lna/
