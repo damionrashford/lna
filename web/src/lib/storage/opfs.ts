@@ -1,7 +1,7 @@
 // File tools: File System Access (a granted folder = local-bind mount) + OPFS (private memory).
 // The FSA permission/iterator APIs aren't all in lib.dom yet, so a few casts to `any`.
 import { idbGet, idbSet } from "./idb";
-import { setCap, set } from "../store";
+import { setCap, set } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Dir = any; // FileSystemDirectoryHandle

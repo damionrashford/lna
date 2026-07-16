@@ -4,8 +4,8 @@
 // (the Goal/Constraints/Progress template both openclaw and hermes-agent use) and keep the recent turns
 // verbatim. Runs on the user's local model over LNA. Best-effort — returns null to leave history as-is.
 import { OpenAI } from "openai";
-import { trimUrl, logEvent } from "../store";
-import { localFetch } from "./net";
+import { trimUrl, logEvent } from "../../store";
+import { localFetch } from "../net/index";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const COMPACT_CHARS = 48000; // heuristic trigger (Ollama's OpenAI surface has no responses.compact)

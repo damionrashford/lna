@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApprovals, resolveApproval, resolveElicitation, type PendingItem } from "../lib/approvals";
+import { useApprovals, resolveApproval, resolveElicitation, type PendingItem } from "../lib/hitl/approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

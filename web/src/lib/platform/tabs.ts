@@ -1,8 +1,8 @@
 // BroadcastChannel — keep the conversation list in sync across tabs of the same origin. When one
 // tab creates, renames, or deletes a session it writes IndexedDB then pings here; other tabs reload
 // their list so the drawer stays consistent. Feature-detected; a no-op where unsupported.
-import { set } from "../store";
-import { idbGet } from "./idb";
+import { set } from "../../store";
+import { idbGet } from "../storage/idb";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const CHANNEL = "automo-tabs";

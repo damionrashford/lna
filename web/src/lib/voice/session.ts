@@ -6,8 +6,8 @@
 // automatic — a fresh utterance interrupts the in-flight turn (transport.interrupt → audio.stopPlayback).
 import { RealtimeAgent, RealtimeSession } from "@openai/agents-realtime";
 import { S, pushThread, patchThread, logEvent, setVoice } from "../../store";
-import { webSearchTool } from "../search";
-import { installModelProvider } from "../model";
+import { webSearchTool } from "../tools/search";
+import { installModelProvider } from "../runtime/model";
 import { loadVoiceConfig } from "./config";
 import { LocalRealtimeTransport } from "./transport";
 import { VoiceAudio } from "./audio";

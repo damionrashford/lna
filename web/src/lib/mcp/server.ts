@@ -12,11 +12,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ElicitRequestSchema, ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { localFetch } from "./net";
-import { authFrame } from "./handshake";
-import { requestElicitation } from "./approvals";
-import { currentRoots } from "./roots";
-import { S, logEvent, updateTask } from "../store";
+import { localFetch } from "../net/index";
+import { authFrame } from "../net/handshake";
+import { requestElicitation } from "../hitl/approvals";
+import { currentRoots } from "../sandbox/roots";
+import { S, logEvent, updateTask } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

@@ -4,15 +4,15 @@
 import { Manifest, gitRepo } from "@openai/agents/sandbox";
 import { S, set, getState, setStatus, setMachine } from "../../store";
 import { detectHardware, recommendModel, recommendFromBridge, bridgeSummary } from "@automo/inference";
-import { probeBridgeHardware } from "../net";
-import { idbGet, idbSet } from "../idb";
-import { getFsRoot } from "../opfs";
-import { BrowserSandboxClient, u8ToB64 } from "../sandbox";
-import { cacheWorkspace, hydrateWorkspaceFromCache, dropWorkspaceCache, mirrorToFolder, requestDurable, importFromFolder, startFolderObserver, stopFolderObserver } from "../persist";
-import { acquireSandboxLock, releaseSandboxLock } from "../locks";
-import { broadcastSessions } from "../tabs";
-import { notifyRootsChanged } from "../mcp";
-import { setWorkspaceRoot } from "../roots";
+import { probeBridgeHardware } from "../net/index";
+import { idbGet, idbSet } from "../storage/idb";
+import { getFsRoot } from "../storage/opfs";
+import { BrowserSandboxClient, u8ToB64 } from "../sandbox/index";
+import { cacheWorkspace, hydrateWorkspaceFromCache, dropWorkspaceCache, mirrorToFolder, requestDurable, importFromFolder, startFolderObserver, stopFolderObserver } from "../sandbox/persist";
+import { acquireSandboxLock, releaseSandboxLock } from "../platform/locks";
+import { broadcastSessions } from "../platform/tabs";
+import { notifyRootsChanged } from "../mcp/index";
+import { setWorkspaceRoot } from "../sandbox/roots";
 
 export * from "./build";
 export * from "./connect";
@@ -142,10 +142,10 @@ export function toggleImageMode() { const on = !getState().imageMode; set({ imag
 
 // ---- boot ----
 export async function boot() {
-  const { restoreFolder } = await import("../opfs");
-  const { reconnectSaved } = await import("../mcp");
-  const { initWakeLock } = await import("../wakelock");
-  const { initTabs } = await import("../tabs");
+  const { restoreFolder } = await import("../storage/opfs");
+  const { reconnectSaved } = await import("../mcp/index");
+  const { initWakeLock } = await import("../platform/wakelock");
+  const { initTabs } = await import("../platform/tabs");
   setStatus("", "not connected");
   initWakeLock();
   initTabs();

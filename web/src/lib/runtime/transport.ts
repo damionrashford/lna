@@ -10,11 +10,11 @@ import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream } from "ai";
 import { run, InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered } from "@openai/agents";
 import { createAiSdkUiMessageStream } from "@openai/agents-extensions/ai-sdk-ui";
-import { S, getState, setUsage, logEvent } from "../store";
+import { S, getState, setUsage, logEvent } from "../../store";
 import { installModelProvider } from "./model";
-import { buildAgent, ensureSandbox } from "./agent";
+import { buildAgent, ensureSandbox } from "../agent";
 import { buildContext } from "./context";
-import { requestApproval } from "./approvals";
+import { requestApproval } from "../hitl/approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const uid = () => Math.random().toString(36).slice(2, 10);

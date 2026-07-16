@@ -5,7 +5,7 @@
 //   2. a granted folder (File System Access) — a live mirror of the workspace files onto real disk,
 //      so you can open and edit what the agent made in Finder. Written under <folder>/workspace/.
 // OPFS is browser-origin-private (never touches real disk); the folder is the only real-disk path.
-import { opfsRoot, resolvePath, getFsRoot, walk } from "./opfs";
+import { opfsRoot, resolvePath, getFsRoot, walk } from "../storage/opfs";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

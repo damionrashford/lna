@@ -9,7 +9,7 @@
 import type { Model, ModelRequest, ModelResponse, StreamEvent, AgentOutputItem } from "@openai/agents";
 import { Usage } from "@openai/agents";
 import { createBrowserEngine, type BrowserEngine } from "@automo/inference";
-import { logEvent } from "../store";
+import { logEvent } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

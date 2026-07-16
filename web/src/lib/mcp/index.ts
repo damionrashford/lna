@@ -2,8 +2,8 @@
 // the SandboxAgent via Agent.mcpServers — the SDK then owns tool exposure, server-prefixed names,
 // filtering, _meta, and structuredContent. Config (label/transport/url/cmd/auth) persists to
 // localStorage for the Settings UI; the instances are live.
-import { set } from "../store";
-import { makeMcpServer, type SdkMcpServer, type McpServerConfig } from "./mcp-server";
+import { set } from "../../store";
+import { makeMcpServer, type SdkMcpServer, type McpServerConfig } from "./server";
 
 export type { McpServerConfig };
 

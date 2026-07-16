@@ -3,7 +3,7 @@
 // which hosts the REAL UnixLocalSandboxClient. So the in-browser @openai/agents SandboxAgent
 // drives a genuine Unix sandbox on the user's machine over Local Network Access.
 import type { SandboxClient, SandboxSession } from "@openai/agents/sandbox";
-import { authFrame } from "./handshake";
+import { authFrame } from "../net/handshake";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const b64ToU8 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));

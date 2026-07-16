@@ -2,10 +2,10 @@
 // and buildAgent() which assembles the full capability set. transport.ts runs the returned agent.
 import { Manifest, SandboxAgent, shell, filesystem, skills, memory, compaction, gitRepo } from "@openai/agents/sandbox";
 import { S } from "../../store";
-import type { AutomoContext } from "../context";
-import { activeMcpServers } from "../mcp";
-import { webSearchTool } from "../search";
-import { agentInputGuardrails, agentOutputGuardrails } from "../guardrails";
+import type { AutomoContext } from "../runtime/context";
+import { activeMcpServers } from "../mcp/index";
+import { webSearchTool } from "../tools/search";
+import { agentInputGuardrails, agentOutputGuardrails } from "../runtime/guardrails";
 
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser, connected to their own machine over Local Network Access. You operate a real Unix sandbox on their machine:
 - shell (exec_command): run commands in the workspace.

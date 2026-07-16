@@ -1,5 +1,5 @@
 // fetch with the LNA loopback hint, plus address-space classification and a bridge liveness probe.
-import { trimUrl, setCap } from "../store";
+import { trimUrl, setCap } from "../../store";
 
 export function localFetch(url: string, opts: RequestInit = {}): Promise<Response> {
   try { return fetch(url, { ...opts, targetAddressSpace: "loopback" } as RequestInit); }

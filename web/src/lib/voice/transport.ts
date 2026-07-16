@@ -14,7 +14,7 @@ import type {
   TransportToolCallEvent, RealtimeSessionConfig, RealtimeItem, RealtimeClientMessage,
 } from "@openai/agents-realtime";
 import type { AgentInputItem, SerializedTool } from "@openai/agents";
-import { resolveBrainModel } from "../model";
+import { resolveBrainModel } from "../runtime/model";
 import type { VoiceConfig } from "./config";
 import type { Tts, TtsSession } from "./tts";
 import type { Stt } from "./asr";

@@ -2,7 +2,7 @@
 // and image generation. The connect() flow drives the ConnectGate diagnostics.
 import { S, trimUrl, set, getState, setStatus, setCap } from "../../store";
 import { providerFor } from "@automo/inference";
-import { localFetch, probeReachable, probeBridge } from "../net";
+import { localFetch, probeReachable, probeBridge } from "../net/index";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

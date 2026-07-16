@@ -4,8 +4,8 @@ import {
   createSession, switchSession, deleteSession, pullModel,
   addRepo, snapshotWorkspace, restoreSnapshot, deleteSnapshot,
 } from "../lib/agent";
-import { grantFolder } from "../lib/opfs";
-import { addMcpServer, removeMcpServer } from "../lib/mcp";
+import { grantFolder } from "../lib/storage/opfs";
+import { addMcpServer, removeMcpServer } from "../lib/mcp/index";
 import { useAutomoChat } from "../chat";
 
 export default function Settings() {

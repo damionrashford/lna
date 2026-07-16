@@ -7,8 +7,8 @@
 // DDG rate-limits scraping, so we also fall back from the html endpoint to the lighter lite one.
 import { tool } from "@openai/agents";
 import { z } from "zod";
-import { S } from "../store";
-import { noSecretsToWeb, redactToolSecrets } from "./guardrails";
+import { S } from "../../store";
+import { noSecretsToWeb, redactToolSecrets } from "../runtime/guardrails";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";

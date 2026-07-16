@@ -4,7 +4,7 @@
 //     (accept + content / decline / cancel). Same idea, richer payload.
 // The transport / MCP client await these; the UI (Approvals.tsx) renders them and resolves.
 import { useSyncExternalStore } from "react";
-import { setBadge } from "./badge";
+import { setBadge } from "../platform/badge";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface PendingItem {

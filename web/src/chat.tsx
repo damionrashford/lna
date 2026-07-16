@@ -3,10 +3,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { useStore, setStatus, S } from "./store";
-import { LocalAgentTransport } from "./lib/transport";
+import { LocalAgentTransport } from "./lib/runtime/transport";
 import { loadUiMessages, saveUiMessages, resetSandbox, generateImageData, persistActiveWorkspace } from "./lib/agent";
-import { acquireWakeLock, releaseWakeLock } from "./lib/wakelock";
-import { maybeCompact } from "./lib/compact";
+import { acquireWakeLock, releaseWakeLock } from "./lib/platform/wakelock";
+import { maybeCompact } from "./lib/runtime/compact";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const uid = () => (crypto as any).randomUUID?.() ?? Math.random().toString(36).slice(2);
