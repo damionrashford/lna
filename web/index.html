@@ -160,6 +160,12 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .approve .ab{display:flex;gap:8px}
 .approve button{border:none;border-radius:var(--r-sm);padding:6px 16px;font-size:0.78rem;font-weight:600;cursor:pointer}
 .approve .ay{background:var(--coral);color:var(--coral-ink)} .approve .an{background:var(--surface-2);color:var(--ink-mid);border:1px solid var(--border)}
+.srow{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)}
+.srow.cur .stitle{color:var(--coral)}
+.srow .stitle{flex:1;font-size:0.82rem;color:var(--ink-mid);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .stitle:hover{color:var(--ink)}
+.srow .sx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px}
+.srow .sx:hover{color:var(--err)}
 
 /* settings drawer */
 .scrim{position:fixed;inset:0;background:oklch(10% 0.01 275 / 0.6);backdrop-filter:blur(3px);opacity:0;
@@ -249,6 +255,13 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 <aside class="drawer" id="drawer" aria-label="Settings">
   <div class="dh"><h3>Settings</h3><div class="spacer"></div><button class="iconbtn" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="body">
+    <div class="field"><label>Conversations</label>
+      <div id="session-list"></div>
+      <button id="new-session" style="margin-top:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;color:var(--ink);font-size:0.8rem;cursor:pointer">+ New conversation</button>
+      <div class="note">Persistent multi-conversation memory (IndexedDB). Each is a Session: history is loaded on open and saved after every turn.</div></div>
+    <div class="field"><label>Auto-compact after N messages (0 = off)</label>
+      <input id="set-compact" type="number" min="0" step="1" value="0" style="font-family:var(--mono)">
+      <div class="note">When a conversation grows past this, AUTOMO summarizes the older turns into one note (client-side; Ollama has no <code>responses.compact</code>). Also a <button id="compact-now" style="background:none;border:none;color:var(--coral);cursor:pointer;padding:0;font:inherit">compact now</button>.</div></div>
     <div class="field"><label>Model endpoint (Ollama)</label>
       <input id="set-url" type="text" spellcheck="false" value="http://localhost:11434">
       <div class="note">Loopback address on your machine. Reached over LNA — Chrome prompts once, then remembers.</div></div>
@@ -324,12 +337,30 @@ const store = {
   set instructions(v){ localStorage.setItem('automo.instructions', v); },
   get budget(){ return +(localStorage.getItem('automo.budget') || 16000); },
   set budget(v){ localStorage.setItem('automo.budget', v); },
+  get compactAt(){ return +(localStorage.getItem('automo.compactAt') || 0); },
+  set compactAt(v){ localStorage.setItem('automo.compactAt', v); },
   get chat(){ try{ return JSON.parse(localStorage.getItem('automo.chat')||'[]'); }catch{ return []; } },
   set chat(v){ localStorage.setItem('automo.chat', JSON.stringify(v.slice(-100))); },
 };
 
 let connected = false;
-let messages = store.chat; // [{role, content}]
+let messages = []; // current session's items (AgentInputItem[]) — loaded on boot
+
+// ===== Sessions: persistent multi-conversation memory (Session interface, IndexedDB-backed) =====
+// Implements the SDK's Session contract: getItems / addItems / popItem / clearSession / getSessionId.
+let sessions = [];    // index: [{ id, title, updated }]
+let sessionId = null; // current session id
+const newSid = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+async function loadSessions() { sessions = (await idbGet('sessions')) || []; }
+async function saveSessions() { await idbSet('sessions', sessions); }
+async function sessGetItems(id, limit) { const it = (await idbGet('session:' + id)) || []; return limit ? it.slice(-limit) : it; }
+async function sessSetItems(id, items) { await idbSet('session:' + id, items); const s = sessions.find((x) => x.id === id); if (s) { s.updated = Date.now(); if (!s.title || s.title === 'New chat') s.title = titleFrom(items); await saveSessions(); } }
+function titleFrom(items) { const u = (items || []).find((m) => m.role === 'user'); const t = u ? (typeof u.content === 'string' ? u.content : 'chat') : 'New chat'; return t.slice(0, 42) || 'New chat'; }
+async function persistSession() { await sessSetItems(sessionId, messages); renderSessionList(); }
+async function switchSession(id) { sessionId = id; localStorage.setItem('automo.session', id); messages = await sessGetItems(id); renderThread(); renderSessionList(); }
+async function createSession() { const id = newSid(); sessions.unshift({ id, title: 'New chat', updated: Date.now() }); await saveSessions(); await idbSet('session:' + id, []); await switchSession(id); }
+async function deleteSession(id) { sessions = sessions.filter((s) => s.id !== id); await saveSessions(); try { await idbSet('session:' + id, undefined); } catch {} if (sessionId === id) { sessions.length ? await switchSession(sessions[0].id) : await createSession(); } renderSessionList(); }
+async function initSessions() { await loadSessions(); const saved = localStorage.getItem('automo.session'); if (sessions.find((s) => s.id === saved)) await switchSession(saved); else if (sessions.length) await switchSession(sessions[0].id); else await createSession(); }
 
 // ---- fetch helper with LNA loopback hint ----
 function localFetch(url, opts = {}) {
@@ -471,9 +502,9 @@ function showDiag(kind) {
 async function probeBridge() {
   try {
     const res = await localFetch('http://localhost:7967/', { method: 'GET' });
-    if (res.ok) { setCap('bridge', 'ok', 'ready'); return; }
+    if (res.ok) { bridgeReady = true; setCap('bridge', 'ok', 'ready · shell tool'); return; }
   } catch {}
-  setCap('bridge', '', 'not running');
+  bridgeReady = false; setCap('bridge', '', 'not running');
 }
 
 // ---- chat ----
@@ -548,11 +579,18 @@ const TOOLS_MEM = [
   { type:'function', name:'mem_read', description:'Read a private memory file. Use offset+limit to page through large files (e.g. spilled tool outputs) instead of loading the whole thing.', parameters:{type:'object',properties:{path:{type:'string'},offset:{type:'integer'},limit:{type:'integer'}},required:['path']} },
   { type:'function', name:'mem_write', description:'Write a private memory file (persists across sessions; mirrored to the granted folder if any).', parameters:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content']} },
 ];
-function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? TOOLS_FS : []), ...mcpTools()]; }
+function buildTools() { return [...TOOLS_MEM, ...(fsRoot ? [...TOOLS_FS, TOOL_APPLY_PATCH] : []), ...(bridgeReady ? [TOOL_SHELL] : []), ...mcpTools()]; }
 
 async function execTool(name, a) {
   const cap = (s) => (typeof s === 'string' ? s.slice(0, 20000) : s);
   if (mcpRegistry[name]) { const { server, tool } = mcpRegistry[name]; return cap(await mcpCall(server, tool, a)); }
+  if (name === 'shell') return cap(await bridgeExec(a.command || ''));
+  if (name === 'apply_patch') {
+    if (!fsRoot) return 'no folder granted';
+    if (a.operation === 'delete_file') { const { dir, file } = await resolvePath(fsRoot, a.path); await dir.removeEntry(file); return 'deleted ' + a.path; }
+    const { dir, file } = await resolvePath(fsRoot, a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close();
+    return a.operation + ' ' + a.path;
+  }
   if (name === 'fs_list') { if (!fsRoot) return 'no folder granted'; const re = globToRe(a.pattern || '**/*'); const out = []; for await (const f of walk(fsRoot)) { if (re.test(f.path)) out.push(f.path); if (out.length >= 500) break; } return JSON.stringify(out); }
   if (name === 'fs_read') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path); return cap(await (await (await dir.getFileHandle(file)).getFile()).text()); }
   if (name === 'fs_write') { if (!fsRoot) return 'no folder granted'; const { dir, file } = await resolvePath(fsRoot, a.path, true); const fh = await dir.getFileHandle(file, { create: true }); const w = await fh.createWritable(); await w.write(a.content ?? ''); await w.close(); return 'wrote ' + a.path; }
@@ -719,6 +757,54 @@ async function streamTurn(model, input, tools, botEl, cursor) {
   return { text, calls: Object.values(calls) };
 }
 
+// ---- session list UI ----
+function renderSessionList() {
+  const el = $('#session-list'); if (!el) return;
+  el.innerHTML = sessions.slice(0, 40).map((s) => `<div class="srow ${s.id === sessionId ? 'cur' : ''}"><span class="stitle" data-sw="${s.id}"></span><button class="sx" data-sd="${s.id}">×</button></div>`).join('') || '<div class="note" style="margin:0">none</div>';
+  el.querySelectorAll('[data-sw]').forEach((b) => { b.textContent = (sessions.find((s) => s.id === b.dataset.sw) || {}).title || 'New chat'; b.onclick = () => { switchSession(b.dataset.sw); closeSettings(); }; });
+  el.querySelectorAll('[data-sd]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); deleteSession(b.dataset.sd); });
+}
+
+// ---- compaction: local summary (Ollama has no responses.compact, so AUTOMO summarizes client-side) ----
+async function summarize(items) {
+  const text = items.map((m) => `${m.role || m.type}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content || m)}`).join('\n').slice(0, 40000);
+  const res = await localFetch(store.url.replace(/\/$/, '') + '/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: store.model, stream: false, instructions: 'Summarize this conversation compactly, preserving facts, decisions, file paths, and open tasks. One short paragraph.', input: [{ role: 'user', content: text }] }) });
+  const d = await res.json();
+  return (d.output || []).flatMap((it) => it.content || []).filter((c) => c.type === 'output_text').map((c) => c.text).join('') || '(summary unavailable)';
+}
+async function compactNow(force) {
+  const keep = 6;
+  if (!force && messages.length < (store.compactAt || 24)) return;
+  if (messages.length <= keep + 1) return;
+  try {
+    const summary = await summarize(messages.slice(0, messages.length - keep));
+    messages = [{ role: 'user', content: '[Earlier conversation summary]\n' + summary }, ...messages.slice(messages.length - keep)];
+    await persistSession(); renderThread();
+  } catch {}
+}
+function maybeAutoCompact() { if (store.compactAt && messages.length >= store.compactAt) compactNow(false); }
+
+// ---- shell (via bridge) + apply_patch (over FSA): SDK tools whose local impl AUTOMO provides ----
+let bridgeReady = false;
+function bridgeExec(command) {
+  return new Promise((resolve) => {
+    let ws; try { ws = new WebSocket('ws://127.0.0.1:7967/ws'); } catch { return resolve('bridge not reachable'); }
+    let out = '', err = '';
+    const to = setTimeout(() => { try { ws.close(); } catch {} resolve('(timeout)\n' + out + err); }, 60000);
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: 'dev' }));
+    ws.onmessage = (e) => { const m = JSON.parse(e.data);
+      if (m.type === 'auth') { if (!m.ok) { clearTimeout(to); ws.close(); return resolve('bridge auth failed'); } ws.send(JSON.stringify({ type: 'spawn', cmd: 'bash', args: ['-lc', command] })); }
+      else if (m.type === 'stdout') out += m.data;
+      else if (m.type === 'stderr') err += m.data;
+      else if (m.type === 'exit') { clearTimeout(to); ws.close(); resolve((out + err).slice(0, 20000) || `(exit ${m.code}, no output)`); }
+      else if (m.type === 'error') { clearTimeout(to); ws.close(); resolve('bridge error: ' + m.error); }
+    };
+    ws.onerror = () => { clearTimeout(to); resolve('bridge not reachable — start it: bun servers/bridge.ts'); };
+  });
+}
+const TOOL_SHELL = { type: 'function', name: 'shell', description: "Run a shell command on the user's machine (bash -lc) via the local bridge. Returns stdout+stderr.", parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } };
+const TOOL_APPLY_PATCH = { type: 'function', name: 'apply_patch', description: 'Structured file edit in the granted folder: create_file, update_file (overwrite), or delete_file.', parameters: { type: 'object', properties: { operation: { type: 'string', enum: ['create_file', 'update_file', 'delete_file'] }, path: { type: 'string' }, content: { type: 'string' } }, required: ['operation', 'path'] } };
+
 // ---- LLM context: system instructions (static + dynamic run context) ----
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser and connected to their own machine over Local Network Access.
 Tools you can call:
@@ -797,7 +883,7 @@ async function send() {
     }
     cursor.remove(); botEl._bubble.classList.remove('thinking');
     if (!finalText) botEl._bubble.textContent = '(done)';
-    messages.push({ role: 'assistant', content: finalText }); store.chat = messages;
+    messages.push({ role: 'assistant', content: finalText }); await persistSession(); maybeAutoCompact();
   } catch (err) {
     cursor.remove(); botEl._bubble.classList.add('err');
     botEl._bubble.textContent = `Couldn't reach the model (${err.message}). Check the connection in settings.`;
@@ -826,7 +912,7 @@ async function generateImage(prompt) {
     const im = document.createElement('img'); im.className = 'gen'; im.src = 'data:image/png;base64,' + b64;
     const cap = document.createElement('div'); cap.className = 'imgcap'; cap.textContent = `${store.image} · "${prompt}"`;
     botEl._bubble.append(im, cap);
-    messages.push({ role: 'assistant', content: `[generated image: ${prompt}]` }); store.chat = messages; scrollDown();
+    messages.push({ role: 'assistant', content: `[generated image: ${prompt}]` }); await persistSession(); scrollDown();
   } catch (err) {
     botEl._bubble.classList.remove('thinking'); botEl._bubble.classList.add('err');
     botEl._bubble.textContent = `Image generation failed (${err.message}).`;
@@ -869,8 +955,8 @@ cw.addEventListener('dragover', (e) => e.preventDefault());
 cw.addEventListener('drop', async (e) => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/')); if (f) setImage(await fileToDataURL(f)); });
 
 // ---- new / clear ----
-$('#new-btn').addEventListener('click', () => { messages = []; store.chat = []; renderThread(); $('#input').focus(); });
-$('#clear-chat').addEventListener('click', () => { messages = []; store.chat = []; renderThread(); closeSettings(); });
+$('#new-btn').addEventListener('click', async () => { await createSession(); $('#input').focus(); });
+$('#clear-chat').addEventListener('click', async () => { messages = []; await persistSession(); renderThread(); closeSettings(); });
 
 // ---- settings drawer ----
 function openSettings() { $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); }
@@ -900,10 +986,15 @@ $('#set-instructions').value = store.instructions;
 $('#set-instructions').addEventListener('change', (e) => { store.instructions = e.target.value; });
 $('#set-budget').value = store.budget;
 $('#set-budget').addEventListener('change', (e) => { store.budget = Math.max(2000, +e.target.value || 16000); });
+$('#set-compact').value = store.compactAt;
+$('#set-compact').addEventListener('change', (e) => { store.compactAt = Math.max(0, +e.target.value || 0); });
+$('#compact-now').addEventListener('click', () => { compactNow(true); closeSettings(); });
+$('#new-session').addEventListener('click', async () => { await createSession(); closeSettings(); $('#input').focus(); });
 
 // ---- boot ----
 setStatus('', 'not connected');
 restoreFolder(); // re-attach a previously granted folder if still permitted
+initSessions();  // load conversations + open the last one
 renderMcpList();
 mcpServers.forEach((s) => mcpConnect(s)); // reconnect saved MCP servers (tolerates failures)
 </script>
