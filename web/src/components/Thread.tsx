@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAutomoChat } from "../chat";
+import Approvals from "./Approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function argsPreview(input: any): string {
@@ -54,6 +55,7 @@ export default function Thread() {
   return (
     <div className="thread" ref={ref}>
       {messages.map((m) => <Message key={m.id} m={m} />)}
+      <Approvals />
       {status === "submitted" && (
         <div className="msg bot"><div className="who">automo</div><div className="bubble thinking">thinking…<span className="cursor" /></div></div>
       )}
