@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "AUTOMO — a local-first browser AI agent that reaches your files, shell, local model, and MCP tools over Local Network Access",
-  "workspaces": ["web", "servers"],
+  "workspaces": ["web", "servers", "inference"],
   "scripts": {
     "serve": "bun x serve web -l 5173",
     "bridge": "BRIDGE_TOKEN=dev bun servers/bridge.ts"

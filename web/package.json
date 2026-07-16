@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.32",
+    "@automo/inference": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.13.4",
     "@openai/agents-extensions": "^0.13.4",
     "ai": "^7.0.29",

@@ -11,7 +11,8 @@
 // so the browser page reaches the model on the machine.
 import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient } from "@openai/agents";
 import { OpenAI } from "openai";
-import { trimUrl } from "../store";
+import { S } from "../store";
+import { providerFor } from "@automo/inference";
 
 // Name MUST contain "ChatCompletions" to trip the SDK's transport check.
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}
@@ -23,19 +24,31 @@ const lnaFetch = ((input: any, init?: any) => {
 }) as any;
 
 let installedFor = "";
-export function installOllamaShim(model: string) {
-  const baseURL = trimUrl() + "/v1/";
-  if (installedFor === baseURL + "|" + model) return model;
-  const client = new OpenAI({ baseURL, apiKey: "ollama", dangerouslyAllowBrowser: true, fetch: lnaFetch });
+// Install the OpenAI client + model provider for the SELECTED inference backend. vLLM implements the
+// native Responses transport, so it gets the real OpenAIResponsesModel (native apply_patch + server
+// compaction — the full capability set). Ollama / HuggingFace / anything non-native gets the
+// ChatCompletions-named subclass so apply_patch + structured tools fall back to function tools.
+export function installModelProvider(model: string) {
+  const p = providerFor(S.provider as any, { ollamaUrl: S.url, vllmUrl: S.vllmUrl, hfToken: S.hfToken });
+  const baseURL = p.baseURL || (S.url.replace(/\/$/, "") + "/v1/");
+  const key = p.kind + "|" + baseURL + "|" + model;
+  if (installedFor === key) return model;
+  const apiKey = p.kind === "huggingface" ? (S.hfToken || "hf") : "ollama"; // ignored by local servers
+  const client = new OpenAI({ baseURL, apiKey, dangerouslyAllowBrowser: true, fetch: lnaFetch });
   setDefaultOpenAIClient(client as any);
+  const native = p.responsesNative;
   setDefaultModelProvider({
     getModel(modelName?: string) {
-      return new ChatCompletionsResponsesModel(client as any, modelName || model);
+      return native
+        ? new OpenAIResponsesModel(client as any, modelName || model)
+        : new ChatCompletionsResponsesModel(client as any, modelName || model);
     },
   });
-  // sanity: the name must trip the check or the shim is a no-op
-  const probe = new ChatCompletionsResponsesModel(client as any, model);
-  if (!probe.constructor.name.includes("ChatCompletions")) throw new Error('shim broken: lost "ChatCompletions"');
-  installedFor = baseURL + "|" + model;
+  if (!native) {
+    // sanity: the shim name must trip the SDK check or the fallback is a no-op
+    const probe = new ChatCompletionsResponsesModel(client as any, model);
+    if (!probe.constructor.name.includes("ChatCompletions")) throw new Error('shim broken: lost "ChatCompletions"');
+  }
+  installedFor = key;
   return model;
 }

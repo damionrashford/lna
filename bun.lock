@@ -5,6 +5,9 @@
     "": {
       "name": "automo",
     },
+    "inference": {
+      "name": "@automo/inference",
+    },
     "servers": {
       "name": "@automo/servers",
       "dependencies": {
@@ -15,6 +18,8 @@
       "name": "@automo/web",
       "dependencies": {
         "@ai-sdk/react": "^4.0.32",
+        "@automo/inference": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@openai/agents": "^0.13.4",
         "@openai/agents-extensions": "^0.13.4",
         "ai": "^7.0.29",
@@ -44,6 +49,8 @@
     "@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@5.0.10", "", { "dependencies": { "@ai-sdk/provider": "4.0.3", "@standard-schema/spec": "^1.1.0", "@workflow/serde": "4.1.0", "eventsource-parser": "^3.0.8" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-uPyec0+85dwxZYXtb8qe8gCjhjDfxP4LCDo/uRQS/iG+FIgYbHPRhr/ys281udG90bTaE18+5cxWraYaf8oHCw=="],
 
     "@ai-sdk/react": ["@ai-sdk/react@4.0.32", "", { "dependencies": { "@ai-sdk/mcp": "2.0.14", "@ai-sdk/provider": "4.0.3", "@ai-sdk/provider-utils": "5.0.10", "ai": "7.0.29", "swr": "^2.4.1", "throttleit": "2.1.0" }, "peerDependencies": { "react": "^18 || ~19.0.1 || ~19.1.2 || ^19.2.1" } }, "sha512-H1tu1C5XoY1fh14Q4ABS1ljPx+H/y20MqJrUhATW5jjdAqOyyAy0rFl2qj5BC9uhFMtM+NkxEUOEPB5qeQLDQQ=="],
+
+    "@automo/inference": ["@automo/inference@workspace:inference"],
 
     "@automo/servers": ["@automo/servers@workspace:servers"],
 

@@ -5,6 +5,7 @@ import ConnectGate from "./components/ConnectGate";
 import Thread from "./components/Thread";
 import Composer from "./components/Composer";
 import Settings from "./components/Settings";
+import DebugPanel from "./components/DebugPanel";
 
 export default function App() {
   const { connected } = useStore();
@@ -14,6 +15,7 @@ export default function App() {
       <main>{connected ? <Thread /> : <ConnectGate />}</main>
       {connected && <Composer />}
       <Settings />
+      <DebugPanel />
     </ChatProvider>
   );
 }

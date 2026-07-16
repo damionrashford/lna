@@ -1,0 +1,12 @@
+{
+  "name": "@automo/inference",
+  "private": true,
+  "type": "module",
+  "description": "AUTOMO inference layer — browser hardware detection + provider-agnostic model access across Ollama, vLLM, HuggingFace, and in-browser transformers.js (WebGPU/WASM)",
+  "exports": {
+    ".": "./index.ts",
+    "./hardware": "./hardware.ts",
+    "./provider": "./provider.ts",
+    "./transformers": "./transformers.ts"
+  }
+}

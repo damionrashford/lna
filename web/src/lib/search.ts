@@ -7,7 +7,6 @@
 // DDG rate-limits scraping, so we also fall back from the html endpoint to the lighter lite one.
 import { tool } from "@openai/agents";
 import { z } from "zod";
-import { activeSandbox } from "./session-ref";
 import { S } from "../store";
 import { noSecretsToWeb, redactToolSecrets } from "./guardrails";
 
@@ -66,7 +65,8 @@ const PROXIES: ((u: string) => { url: string; json?: boolean })[] = [
 const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 // fetch a target page's HTML, trying browser proxies first, then the live sandbox's curl.
-async function fetchPage(target: string): Promise<string> {
+// `session` comes from the run's RunContext (see execute); null when no sandbox is running.
+async function fetchPage(target: string, session: any): Promise<string> {
   for (const make of PROXIES) {
     const { url, json } = make(target);
     try {
@@ -77,7 +77,6 @@ async function fetchPage(target: string): Promise<string> {
       if (body && body.length > 800) return body;
     } catch { /* try next */ }
   }
-  const session = activeSandbox();
   if (session) {
     try {
       const cmd = `curl -sL --max-time 20 --compressed -A ${shq(UA)} -H 'Accept: text/html' -H 'Accept-Language: en-US,en;q=0.9' -H 'Referer: https://duckduckgo.com/' ${shq(target)}`;
@@ -98,14 +97,15 @@ export const webSearchTool = tool({
   needsApproval: async () => S.approve, // human-in-the-loop when the Settings toggle is on
   inputGuardrails: [noSecretsToWeb],    // don't send credentials to the web
   outputGuardrails: [redactToolSecrets], // redact credentials from results
-  execute: async ({ query, max_results }) => {
+  execute: async ({ query, max_results }, runContext?: any) => {
+    const session = runContext?.context?.session ?? null; // live sandbox from RunContext, for curl fallback
     const q = encodeURIComponent(query);
     const sources: [string, (h: string, n: number) => SearchResult[]][] = [
       ["https://html.duckduckgo.com/html/?q=" + q, parseDdgHtml],
       ["https://lite.duckduckgo.com/lite/?q=" + q, parseDdgLite],
     ];
     for (const [url, parse] of sources) {
-      const html = await fetchPage(url);
+      const html = await fetchPage(url, session);
       const res = parse(html, max_results);
       if (res.length) return JSON.stringify(res);
     }

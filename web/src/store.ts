@@ -10,6 +10,10 @@ export type ThreadItem =
   | { id: string; kind: "approve"; name: string; argsStr: string; onDecision: (ok: boolean) => void };
 
 export type McpView = { label: string; transport: string; connected: boolean; error: string | null; tools: number };
+export type LogEntry = { t: number; level: "info" | "warn" | "error"; msg: string };
+export type Usage = { requests: number; input: number; output: number; total: number };
+export type TaskInfo = { server: string; tool: string; status: string; t: number };
+export type MachineInfo = { tier: string; note: string; examples: string[]; summary: string };
 
 export interface State {
   status: { state: string; text: string };
@@ -30,6 +34,11 @@ export interface State {
   pull: { show: boolean; pct: number; text: string };
   snaps: string[];
   repoSt: string;
+  logs: LogEntry[];
+  usage: Usage | null;
+  debugOpen: boolean;
+  tasks: TaskInfo[];
+  machine: MachineInfo | null;
 }
 
 let state: State = {
@@ -55,6 +64,11 @@ let state: State = {
   pull: { show: false, pct: 0, text: "" },
   snaps: [],
   repoSt: "",
+  logs: [],
+  usage: null,
+  debugOpen: false,
+  tasks: [],
+  machine: null,
 };
 
 const listeners = new Set<() => void>();
@@ -84,6 +98,21 @@ export function moveThreadToEnd(id: string) {
   set({ thread: [...state.thread.filter((t) => t.id !== id), item] });
 }
 
+// structured run log — a capped ring buffer surfaced in the debug panel; also echoed to the console.
+export function logEvent(level: LogEntry["level"], msg: string) {
+  (level === "error" ? console.error : level === "warn" ? console.warn : console.info)(`[automo] ${msg}`);
+  set({ logs: [...state.logs.slice(-199), { t: Date.now(), level, msg }] });
+}
+export function setUsage(u: Usage | null) { set({ usage: u }); }
+export function setMachine(m: MachineInfo | null) { set({ machine: m }); }
+
+// upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
+export function updateTask(server: string, tool: string, status: string) {
+  const key = server + "/" + tool;
+  const rest = state.tasks.filter((t) => t.server + "/" + t.tool !== key);
+  set({ tasks: [...rest, { server, tool, status, t: Date.now() }].slice(-30) });
+}
+
 export function setStatus(st: string, text: string) { set({ status: { state: st, text } }); }
 export function setCap(key: "model" | "bridge" | "files", dot: string, text: string) {
   set({ caps: { ...state.caps, [key]: { dot, text } } });
@@ -105,10 +134,15 @@ export const S = {
   set guardrails(v: boolean) { localStorage.setItem("automo.guardrails", v ? "1" : "0"); },
   get instructions() { return localStorage.getItem("automo.instructions") || ""; },
   set instructions(v: string) { localStorage.setItem("automo.instructions", v); },
-  get budget() { return +(localStorage.getItem("automo.budget") || 16000); },
-  set budget(v: number) { localStorage.setItem("automo.budget", String(v)); },
-  get compactAt() { return +(localStorage.getItem("automo.compactAt") || 0); },
-  set compactAt(v: number) { localStorage.setItem("automo.compactAt", String(v)); },
+  get bridgeToken() { return localStorage.getItem("automo.bridgeToken") || "dev"; },
+  set bridgeToken(v: string) { localStorage.setItem("automo.bridgeToken", v || "dev"); },
+  // inference backend selection
+  get provider() { return (localStorage.getItem("automo.provider") || "ollama") as "ollama" | "vllm" | "huggingface" | "browser"; },
+  set provider(v: string) { localStorage.setItem("automo.provider", v); },
+  get vllmUrl() { return localStorage.getItem("automo.vllmUrl") || "http://localhost:8000"; },
+  set vllmUrl(v: string) { localStorage.setItem("automo.vllmUrl", v); },
+  get hfToken() { return localStorage.getItem("automo.hfToken") || ""; },
+  set hfToken(v: string) { localStorage.setItem("automo.hfToken", v); },
 };
 
 export const trimUrl = () => S.url.replace(/\/$/, "");

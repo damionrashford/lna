@@ -8,7 +8,7 @@ function copy(text: string, e: { currentTarget: HTMLButtonElement }) {
 }
 
 export default function ConnectGate() {
-  const { connecting, diag } = useStore();
+  const { connecting, diag, machine } = useStore();
   const origin = location.origin;
   const ollamaCmd = `OLLAMA_ORIGINS='${origin}' ollama serve`;
   return (
@@ -27,11 +27,17 @@ export default function ConnectGate() {
         <div className="step"><div className="n">3</div><div className="b">Connect &amp; grant the prompt
           <div className="d">Chrome will ask to allow local-network access. Click Allow.</div></div></div>
       </div>
+      {machine && (
+        <div className="diag" style={{ marginTop: 4, textAlign: "left" }}>
+          <b>Your machine</b>{machine.summary ? ` — ${machine.summary}` : ""}: <b>{machine.tier}</b> tier. {machine.note}<br />
+          <span style={{ color: "var(--muted)" }}>Suggested: {machine.examples.join(" · ")}</span>
+        </div>
+      )}
       <button className="cta" disabled={connecting} onClick={() => connect()}>
         <span>{connecting ? "connecting…" : "Connect to your machine"}</span>
       </button>
       {diag.show && <div className="diag" dangerouslySetInnerHTML={{ __html: diag.html }} />}
-      <div className="foot">Nothing is sent anywhere but your own machine.</div>
+      <div className="foot">Your model, files, and shell stay on your machine. (Web search, if the agent uses it, fetches through a public proxy.)</div>
     </section>
   );
 }

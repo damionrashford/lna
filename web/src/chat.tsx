@@ -2,9 +2,11 @@
 // transport, with per-session UIMessage persistence + multimodal + image generation.
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
-import { useStore, setStatus } from "./store";
+import { useStore, setStatus, S } from "./store";
 import { LocalAgentTransport } from "./lib/transport";
-import { loadUiMessages, saveUiMessages, resetSandbox, generateImageData } from "./lib/agent";
+import { loadUiMessages, saveUiMessages, resetSandbox, generateImageData, persistActiveWorkspace } from "./lib/agent";
+import { acquireWakeLock, releaseWakeLock } from "./lib/wakelock";
+import { maybeCompact } from "./lib/compact";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const uid = () => (crypto as any).randomUUID?.() ?? Math.random().toString(36).slice(2);
@@ -18,7 +20,6 @@ export interface ChatApi {
   sendImage: (text: string, dataUrl: string) => void;
   generateImage: (prompt: string) => Promise<void>;
   clear: () => Promise<void>;
-  compact: () => void;
   stop: () => void;
   regenerate: () => void;
 }
@@ -47,10 +48,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [sessionId, setMessages]);
 
-  // persist once a turn settles for the loaded session
+  // persist once a turn settles for the loaded session: conversation + durable sandbox workspace
   useEffect(() => {
-    if (sessionId && loadedFor.current === sessionId && status === "ready") saveUiMessages(sessionId, messages);
-  }, [messages, status, sessionId]);
+    if (sessionId && loadedFor.current === sessionId && status === "ready") {
+      saveUiMessages(sessionId, messages);
+      persistActiveWorkspace();
+      // client-side compaction (server-side is disabled by our shim); best-effort, only fires when large
+      maybeCompact(messages, S.model).then((c) => {
+        if (c && loadedFor.current === sessionId) { setMessages(c); saveUiMessages(sessionId, c); }
+      });
+    }
+  }, [messages, status, sessionId, setMessages]);
+
+  // hold a screen wake lock while a run is in flight so the machine doesn't sleep mid-task
+  const running = status === "submitted" || status === "streaming";
+  useEffect(() => { if (running) acquireWakeLock(); else releaseWakeLock(); }, [running]);
 
   const api = useMemo<ChatApi>(() => ({
     messages,
@@ -72,7 +84,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (sessionId) await saveUiMessages(sessionId, next);
     },
     clear: async () => { setMessages([]); await resetSandbox(); if (sessionId) await saveUiMessages(sessionId, []); },
-    compact: () => setMessages((m: any[]) => m.slice(-6)),
     stop,
     regenerate,
   }), [messages, status, error, sendMessage, setMessages, stop, regenerate, sessionId]);

@@ -10,9 +10,10 @@ import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream } from "ai";
 import { run, InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered } from "@openai/agents";
 import { createAiSdkUiMessageStream } from "@openai/agents-extensions/ai-sdk-ui";
-import { S } from "../store";
-import { installOllamaShim } from "./ollama";
+import { S, getState, setUsage, logEvent } from "../store";
+import { installModelProvider } from "./model";
 import { buildAgent, ensureSandbox } from "./agent";
+import { buildContext } from "./context";
 import { requestApproval } from "./approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -37,18 +38,25 @@ const hasImage = (messages: UIMessage[]) =>
 export class LocalAgentTransport implements ChatTransport<UIMessage> {
   async sendMessages({ messages, abortSignal }: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0]): Promise<ReadableStream<UIMessageChunk>> {
     const model = hasImage(messages) ? S.vision || S.model : S.model;
-    installOllamaShim(model);
+    installModelProvider(model);
     const agent = buildAgent(model);
     const session = await ensureSandbox();
     const input = toAgentInput(messages);
-    const opts = { sandbox: { session }, stream: true, maxTurns: 24, signal: abortSignal } as any;
+    // context: the app-local RunContext (AutomoContext) for this run — sandbox session, settings
+    // snapshot, run env, logger — read by every tool, guardrail, and the dynamic instructions.
+    const opts = { sandbox: { session }, context: buildContext(session, getState().sessionId), stream: true, maxTurns: 24, signal: abortSignal } as any;
 
     return createUIMessageStream({
-      onError: (e: any) =>
-        e instanceof InputGuardrailTripwireTriggered || e instanceof OutputGuardrailTripwireTriggered
+      onError: (e: any) => {
+        const guard = e instanceof InputGuardrailTripwireTriggered || e instanceof OutputGuardrailTripwireTriggered;
+        const msg = guard
           ? `Blocked by the ${e instanceof InputGuardrailTripwireTriggered ? "input" : "output"} guardrail — a credential was detected. Turn stopped.`
-          : e?.message || "run failed",
+          : e?.message || "run failed";
+        logEvent(guard ? "warn" : "error", msg);
+        return msg;
+      },
       execute: async ({ writer }: any) => {
+        logEvent("info", `run started · model ${model}`);
         let result: any = await run(agent, input as any, opts);
         writer.merge(createAiSdkUiMessageStream(result));
         await result.completed;
@@ -65,6 +73,9 @@ export class LocalAgentTransport implements ChatTransport<UIMessage> {
           writer.merge(createAiSdkUiMessageStream(result));
           await result.completed;
         }
+        // surface aggregate token usage for this turn (RunContext.usage is cumulative in result.state)
+        const u = result.state?.usage;
+        setUsage(u ? { requests: u.requests || 0, input: u.inputTokens || 0, output: u.outputTokens || 0, total: u.totalTokens || 0 } : null);
       },
     }) as any;
   }
