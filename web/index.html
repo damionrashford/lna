@@ -288,7 +288,21 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
         <button id="grant-folder" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:9px 14px;font-weight:600;font-size:0.8rem;cursor:pointer">Grant a folder</button>
         <span class="note" style="margin:0">folder: <span id="fs-name">none</span></span>
       </div>
-      <div class="note">Grants the agent <code>fs_list</code> · <code>fs_read</code> · <code>fs_write</code> on a folder you pick (File System Access). It always has private <code>mem_*</code> tools on OPFS. The model calls these itself — try "list the markdown files and summarize the README".</div></div>
+      <div class="note">The granted folder is a <b>local-bind mount</b>: <code>fs_list</code> · <code>fs_read</code> · <code>fs_write</code> · <code>apply_patch</code>. OPFS gives private <code>mem_*</code> tools. Shell (<code>bash</code>) is the <b>Unix-local</b> tool, active when the bridge runs.</div></div>
+    <div class="field"><label>GitHub repo → workspace</label>
+      <div style="display:flex;gap:6px">
+        <input id="repo-spec" placeholder="owner/repo  (optionally @ref)" style="flex:1">
+        <button id="repo-add" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:0 15px;font-weight:600;font-size:0.8rem;cursor:pointer">Clone</button>
+      </div>
+      <div id="repo-st" class="note" style="margin-top:6px"></div>
+      <div class="note">Clones a public repo's files into OPFS (<code>repos/&lt;owner&gt;_&lt;repo&gt;/</code>) — the browser's <code>gitRepo()</code> workspace entry, materialized with a concurrency-tuned parallel download. The agent reads them via <code>mem_*</code>.</div></div>
+    <div class="field"><label>Snapshots — workspace + conversation</label>
+      <div id="snap-list"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input id="snap-name" placeholder="snapshot name" style="flex:1">
+        <button id="snap-save" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:0 15px;color:var(--ink);font-size:0.8rem;cursor:pointer">Snapshot</button>
+      </div>
+      <div class="note">Saves the OPFS workspace + this conversation. Restore seeds a fresh session from it. (Plain resume across reloads is automatic — OPFS + IndexedDB persist, so the agent's sandbox is developer-owned and durable.)</div></div>
     <div class="field"><label>MCP servers</label>
       <div id="mcp-list"></div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
@@ -805,6 +819,48 @@ function bridgeExec(command) {
 const TOOL_SHELL = { type: 'function', name: 'shell', description: "Run a shell command on the user's machine (bash -lc) via the local bridge. Returns stdout+stderr.", parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } };
 const TOOL_APPLY_PATCH = { type: 'function', name: 'apply_patch', description: 'Structured file edit in the granted folder: create_file, update_file (overwrite), or delete_file.', parameters: { type: 'object', properties: { operation: { type: 'string', enum: ['create_file', 'update_file', 'delete_file'] }, path: { type: 'string' }, content: { type: 'string' } }, required: ['operation', 'path'] } };
 
+// ---- workspace: clone a GitHub repo into OPFS (the browser's gitRepo() / Manifest entry) ----
+// Materialization is concurrency-tuned (parallel download pool) like the SDK's concurrencyLimits.
+async function addRepo(spec, concurrency = 8) {
+  const st = $('#repo-st'); const set = (t) => { if (st) st.textContent = t; };
+  const m = spec.trim().replace(/^https?:\/\/github\.com\//, '').match(/^([^/]+)\/([^@/#\s]+)(?:[@#](.+))?$/);
+  if (!m) return set('use owner/repo (optionally @ref)');
+  let [, owner, repo, ref] = m; repo = repo.replace(/\.git$/, '');
+  try {
+    set('resolving…');
+    if (!ref) { const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`); if (!r.ok) throw new Error('repo HTTP ' + r.status); ref = (await r.json()).default_branch || 'main'; }
+    const tr = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`); if (!tr.ok) throw new Error('tree HTTP ' + tr.status);
+    const blobs = ((await tr.json()).tree || []).filter((e) => e.type === 'blob' && (e.size || 0) < 250000 && !/\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|tar|mp4|mov|mp3|wav|woff2?|ttf|eot|otf|bin|so|dylib|wasm|jar|class|node)$/i.test(e.path)).slice(0, 400);
+    const base = `repos/${owner}_${repo}`; let done = 0, ok = 0, i = 0;
+    async function worker() { while (i < blobs.length) { const e = blobs[i++]; try { const raw = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${e.path}`); if (raw.ok) { await opfsWriteFile(`${base}/${e.path}`, await raw.text()); ok++; } } catch {} set(`downloading ${++done}/${blobs.length}…`); } }
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(16, concurrency)) }, worker));
+    set(`✓ ${ok} files → OPFS ${base}/ — the agent can mem_list / mem_read them`);
+    const repos = JSON.parse(localStorage.getItem('automo.repos') || '[]'); if (!repos.includes(`${owner}/${repo}`)) { repos.push(`${owner}/${repo}`); localStorage.setItem('automo.repos', JSON.stringify(repos)); }
+  } catch (err) { set('failed: ' + err.message); }
+}
+
+// ---- snapshot / resume: OPFS workspace + conversation. Resume across reloads is automatic (OPFS + IndexedDB persist). ----
+async function snapshotWorkspace(name) {
+  name = (name || 'snapshot').trim(); const files = [];
+  for await (const f of walk(await opfsRoot())) { try { const { dir, file } = await resolvePath(await opfsRoot(), f.path); files.push({ path: f.path, content: await (await (await dir.getFileHandle(file)).getFile()).text() }); } catch {} }
+  await idbSet('snapshot:' + name, { at: Date.now(), items: messages.slice(), files });
+  const idx = JSON.parse(localStorage.getItem('automo.snaps') || '[]'); if (!idx.includes(name)) { idx.push(name); localStorage.setItem('automo.snaps', JSON.stringify(idx)); }
+  renderSnaps();
+}
+async function restoreSnapshot(name) {
+  const snap = await idbGet('snapshot:' + name); if (!snap) return;
+  await createSession();
+  for (const f of (snap.files || [])) await opfsWriteFile(f.path, f.content);
+  messages = (snap.items || []).slice(); await persistSession(); renderThread();
+}
+function renderSnaps() {
+  const el = $('#snap-list'); if (!el) return;
+  const idx = JSON.parse(localStorage.getItem('automo.snaps') || '[]');
+  el.innerHTML = idx.map((n) => `<div class="srow"><span class="stitle" data-rs="${n}"></span><button class="sx" data-ds="${n}">×</button></div>`).join('') || '<div class="note" style="margin:0">none</div>';
+  el.querySelectorAll('[data-rs]').forEach((b) => { b.textContent = b.dataset.rs; b.onclick = () => { restoreSnapshot(b.dataset.rs); closeSettings(); }; });
+  el.querySelectorAll('[data-ds]').forEach((b) => b.onclick = () => { const idx = JSON.parse(localStorage.getItem('automo.snaps') || '[]').filter((x) => x !== b.dataset.ds); localStorage.setItem('automo.snaps', JSON.stringify(idx)); idbSet('snapshot:' + b.dataset.ds, undefined); renderSnaps(); });
+}
+
 // ---- LLM context: system instructions (static + dynamic run context) ----
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser and connected to their own machine over Local Network Access.
 Tools you can call:
@@ -990,6 +1046,9 @@ $('#set-compact').value = store.compactAt;
 $('#set-compact').addEventListener('change', (e) => { store.compactAt = Math.max(0, +e.target.value || 0); });
 $('#compact-now').addEventListener('click', () => { compactNow(true); closeSettings(); });
 $('#new-session').addEventListener('click', async () => { await createSession(); closeSettings(); $('#input').focus(); });
+$('#repo-add').addEventListener('click', () => addRepo($('#repo-spec').value));
+$('#snap-save').addEventListener('click', () => { snapshotWorkspace($('#snap-name').value); $('#snap-name').value = ''; });
+renderSnaps();
 
 // ---- boot ----
 setStatus('', 'not connected');
