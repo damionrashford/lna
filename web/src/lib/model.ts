@@ -13,6 +13,7 @@ import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient }
 import { OpenAI } from "openai";
 import { S } from "../store";
 import { providerFor } from "@automo/inference";
+import { BrowserModel } from "./browser-model";
 
 // Name MUST contain "ChatCompletions" to trip the SDK's transport check.
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}
@@ -30,6 +31,15 @@ let installedFor = "";
 // ChatCompletions-named subclass so apply_patch + structured tools fall back to function tools.
 export function installModelProvider(model: string) {
   const p = providerFor(S.provider as any, { ollamaUrl: S.url, vllmUrl: S.vllmUrl, hfToken: S.hfToken });
+  // In-browser engine: no HTTP endpoint / OpenAI client — the model provider returns a BrowserModel that
+  // runs transformers.js on WebGPU/WASM, so the SandboxAgent drives real local inference (text-only).
+  if (p.kind === "browser") {
+    const key = "browser|" + model;
+    if (installedFor === key) return model;
+    setDefaultModelProvider({ getModel(modelName?: string) { return new BrowserModel(modelName || model); } });
+    installedFor = key;
+    return model;
+  }
   const baseURL = p.baseURL || (S.url.replace(/\/$/, "") + "/v1/");
   const key = p.kind + "|" + baseURL + "|" + model;
   if (installedFor === key) return model;
