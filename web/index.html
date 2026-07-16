@@ -244,6 +244,16 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
     <div class="field"><label>Image model (generation)</label>
       <select id="set-image"><option value="">— none —</option></select>
       <div class="note">Used in image mode (the ✦ button). Needs a diffusion model (e.g. flux).</div></div>
+    <div class="field"><label>Get a model — downloads to your machine</label>
+      <div style="display:flex;gap:6px">
+        <input id="pull-name" type="text" spellcheck="false" placeholder="llama3.2" style="flex:1">
+        <button id="pull-btn" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:0 16px;font-weight:600;font-size:0.8rem;cursor:pointer">Pull</button>
+      </div>
+      <div id="pull-prog" style="display:none">
+        <div style="height:5px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin-top:9px"><div id="pull-bar" style="height:100%;width:0;background:var(--coral);transition:width .2s"></div></div>
+        <div id="pull-st" class="note" style="margin-top:6px"></div>
+      </div>
+      <div class="note">The browser triggers <code>/api/pull</code> on your machine — no terminal needed. (Setting the origin + starting Ollama still has to happen once on the machine — the browser can't launch a process.)</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
@@ -311,25 +321,63 @@ async function connect() {
   setStatus('busy', 'connecting…');
   const t0 = performance.now();
   try {
-    const res = await localFetch(url + '/api/tags', { method: 'GET' });
-    if (!res.ok) throw new Error(`Ollama replied HTTP ${res.status}`);
-    const data = await res.json();
-    const models = (data.models || []).map((m) => m.name);
+    const models = await refreshModels();
     if (!models.length) { showDiag('no-model'); return failConnect(); }
-    // categorize by name heuristic → chat / vision / image
-    const image = models.filter((m) => /flux|stable|sdxl|\bsd\d|diffus|image-?gen|dalle/i.test(m));
-    const vision = models.filter((m) => /vl\b|-vl|vision|llava|multimodal|moondream/i.test(m));
-    const chat = models.filter((m) => !image.includes(m));
-    fillSelect('#set-model', chat, store.model);         store.model = $('#set-model').value;
-    fillSelect('#set-vision', vision, store.vision, '— none —'); store.vision = $('#set-vision').value;
-    fillSelect('#set-image', image, store.image, '— none —');   store.image = $('#set-image').value;
     onConnected(models);
   } catch (err) {
     const ms = Math.round(performance.now() - t0);
-    // Diagnose: fast fail on https→http loopback usually = LNA blocked or CORS or Ollama down.
-    showDiag(diagnose(err, ms));
+    // If a no-cors probe reaches Ollama but the real read failed, it's specifically CORS.
+    const reachable = await probeReachable();
+    showDiag(reachable ? 'cors' : diagnose(err, ms));
     failConnect();
   }
+}
+// GET /api/tags, categorize by name heuristic, fill the three model pickers.
+async function refreshModels() {
+  const res = await localFetch(store.url.replace(/\/$/, '') + '/api/tags', { method: 'GET' });
+  if (!res.ok) throw new Error(`Ollama replied HTTP ${res.status}`);
+  const models = ((await res.json()).models || []).map((m) => m.name);
+  const image = models.filter((m) => /flux|stable|sdxl|\bsd\d|diffus|image-?gen|dalle/i.test(m));
+  const vision = models.filter((m) => /vl\b|-vl|vision|llava|multimodal|moondream/i.test(m));
+  const chat = models.filter((m) => !image.includes(m));
+  fillSelect('#set-model', chat, store.model);               store.model = $('#set-model').value;
+  fillSelect('#set-vision', vision, store.vision, '— none —'); store.vision = $('#set-vision').value;
+  fillSelect('#set-image', image, store.image, '— none —');   store.image = $('#set-image').value;
+  $('#model-hint').textContent = store.model;
+  return models;
+}
+// no-cors reachability: resolves (opaque) if Ollama answers + LNA is granted, even when CORS blocks the read.
+async function probeReachable() {
+  try { await localFetch(store.url.replace(/\/$/, '') + '/api/version', { mode: 'no-cors' }); return true; }
+  catch { return false; }
+}
+// Pull a model FROM THE BROWSER (POST /api/pull, NDJSON progress). Needs an already-connected origin.
+async function pullModel(name) {
+  name = (name || '').trim(); if (!name) return;
+  const btn = $('#pull-btn'), st = $('#pull-st'), bar = $('#pull-bar'), prog = $('#pull-prog');
+  btn.disabled = true; prog.style.display = 'block'; bar.style.width = '0%'; st.textContent = 'starting…';
+  try {
+    const res = await localFetch(store.url.replace(/\/$/, '') + '/api/pull', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: name, stream: true }),
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true }); let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
+        let o; try { o = JSON.parse(line); } catch { continue; }
+        if (o.error) throw new Error(o.error);
+        if (o.total && o.completed) { const p = Math.round(o.completed / o.total * 100); bar.style.width = p + '%'; st.textContent = `${o.status} · ${p}%`; }
+        else st.textContent = o.status || '…';
+      }
+    }
+    bar.style.width = '100%'; st.textContent = 'done ✓';
+    await refreshModels();
+    if (!connected) { setStatus('ok', 'connected'); onConnected(await refreshModels()); }
+  } catch (err) { st.textContent = 'failed: ' + err.message; }
+  finally { btn.disabled = false; }
 }
 function failConnect() {
   connected = false; $('#connect-btn').disabled = false;
@@ -358,6 +406,9 @@ function showDiag(kind) {
   const el = $('#diag'); el.classList.add('show');
   const origin = location.origin;
   const map = {
+    'cors': `<b>Ollama is running, but not allowing this page.</b> It answered a probe, so LNA + the connection are fine — it's a CORS block. Restart it allowing this origin:<ul>
+      <li><code>OLLAMA_ORIGINS='${origin}' ollama serve</code></li>
+      <li>(macOS app) <code>launchctl setenv OLLAMA_ORIGINS '${origin}'</code> then restart Ollama.</li></ul>`,
     'blocked': `<b>Couldn't reach your model.</b> Most likely one of:<ul>
       <li>You denied (or haven't seen) the <b>local-network</b> prompt — reload and click Allow.</li>
       <li>Ollama isn't allowing this page — start it with <code>OLLAMA_ORIGINS='${origin}'</code>.</li>
@@ -540,6 +591,8 @@ $('#set-url').addEventListener('change', (e) => { store.url = e.target.value.tri
 $('#set-model').addEventListener('change', (e) => { store.model = e.target.value; $('#model-hint').textContent = e.target.value; });
 $('#set-vision').addEventListener('change', (e) => { store.vision = e.target.value; });
 $('#set-image').addEventListener('change', (e) => { store.image = e.target.value; });
+$('#pull-btn').addEventListener('click', () => pullModel($('#pull-name').value));
+$('#pull-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') pullModel(e.target.value); });
 
 // ---- boot ----
 setStatus('', 'not connected');
