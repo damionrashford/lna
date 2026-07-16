@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useStore, S, set } from "../store";
 import {
-  createSession, switchSession, deleteSession, pullModel, compactNow, clearConversation,
+  createSession, switchSession, deleteSession, pullModel,
   addRepo, snapshotWorkspace, restoreSnapshot, deleteSnapshot,
 } from "../lib/agent";
 import { grantFolder } from "../lib/opfs";
 import { addMcpServer, removeMcpServer } from "../lib/mcp";
+import { useAutomoChat } from "../chat";
 
 export default function Settings() {
   const st = useStore();
+  const { messages, compact, clear } = useAutomoChat();
   const [url, setUrl] = useState(S.url);
   const [model, setModel] = useState(S.model);
   const [vision, setVision] = useState(S.vision);
@@ -50,7 +52,7 @@ export default function Settings() {
 
           <div className="field"><label>Auto-compact after N messages (0 = off)</label>
             <input type="number" min={0} step={1} value={compactAt} onChange={(e) => { const v = Math.max(0, +e.target.value || 0); setCompactAt(v); S.compactAt = v; }} />
-            <div className="note">When a conversation grows past this, AUTOMO summarizes the older turns into one note (client-side; Ollama has no <code>responses.compact</code>). Also a <button onClick={() => { compactNow(true); close(); }} style={{ background: "none", border: "none", color: "var(--coral)", cursor: "pointer", padding: 0, font: "inherit" }}>compact now</button>.</div></div>
+            <div className="note">When a conversation grows past this, AUTOMO summarizes the older turns into one note (client-side; Ollama has no <code>responses.compact</code>). Also a <button onClick={() => { compact(); close(); }} style={{ background: "none", border: "none", color: "var(--coral)", cursor: "pointer", padding: 0, font: "inherit" }}>compact now</button>.</div></div>
 
           <div className="field"><label>Model endpoint (Ollama)</label>
             <input type="text" spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => { S.url = url.trim(); }} />
@@ -115,7 +117,7 @@ export default function Settings() {
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <input placeholder="snapshot name" style={{ flex: 1 }} value={snapName} onChange={(e) => setSnapName(e.target.value)} />
-              <button onClick={() => { snapshotWorkspace(snapName); setSnapName(""); }} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "0 15px", color: "var(--ink)", fontSize: "0.8rem", cursor: "pointer" }}>Snapshot</button>
+              <button onClick={() => { snapshotWorkspace(snapName, messages); setSnapName(""); }} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "0 15px", color: "var(--ink)", fontSize: "0.8rem", cursor: "pointer" }}>Snapshot</button>
             </div>
             <div className="note">Saves the OPFS workspace + this conversation. Restore seeds a fresh session from it. (Plain resume across reloads is automatic — OPFS + IndexedDB persist, so the agent's sandbox is developer-owned and durable.)</div></div>
 
@@ -161,7 +163,7 @@ export default function Settings() {
             </div>
           </div>
 
-          <button className="ghost" onClick={() => { clearConversation(); close(); }}>Clear conversation</button>
+          <button className="ghost" onClick={() => { clear(); close(); }}>Clear conversation</button>
           <div className="privacy"><b>Local-first.</b> AUTOMO is a static page on GitHub Pages. It has no server. Your messages go straight to the model on your machine and stay there. Connection settings and chat history live in this browser only.</div>
         </div>
       </aside>

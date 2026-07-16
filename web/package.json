@@ -8,7 +8,10 @@
     "build": "bun run ./build.ts"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.32",
     "@openai/agents": "^0.13.4",
+    "@openai/agents-extensions": "^0.13.4",
+    "ai": "^7.0.29",
     "openai": "^6.47.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

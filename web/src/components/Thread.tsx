@@ -1,61 +1,69 @@
 import { useEffect, useRef } from "react";
-import { useStore, type ThreadItem } from "../store";
+import { useAutomoChat } from "../chat";
 
-function argsPreview(argsStr: string): string {
-  try { return Object.values(JSON.parse(argsStr || "{}")).map((v) => String(v).slice(0, 40)).join(", "); }
-  catch { return ""; }
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function argsPreview(input: any): string {
+  if (input == null) return "";
+  try { return Object.values(typeof input === "string" ? JSON.parse(input) : input).map((v) => String(v).slice(0, 40)).join(", "); } catch { return String(input).slice(0, 40); }
 }
-function resultPreview(out: string): string {
-  let s = out;
+function resultPreview(output: any): string {
+  let s = typeof output === "string" ? output : JSON.stringify(output ?? "");
   try { const a = JSON.parse(s); if (Array.isArray(a)) s = a.length + " item" + (a.length === 1 ? "" : "s"); } catch { /* keep */ }
   return "→ " + s.slice(0, 60);
 }
 
-function Item({ item }: { item: ThreadItem }) {
-  if (item.kind === "tool") {
-    const args = argsPreview(item.argsStr);
-    return (
-      <div className="toolchip">
-        <span className="tk">{item.name}</span>
-        <span className="ta">{args ? "· " + args : ""}</span>
-        <span className="tr">{item.result != null ? resultPreview(item.result) : "running…"}</span>
-      </div>
-    );
-  }
-  if (item.kind === "approve") {
-    return (
-      <div className="approve">
-        <div className="at">Run <b>{item.name}</b>? <span className="aa">{(item.argsStr || "").slice(0, 120)}</span></div>
-        <div className="ab">
-          <button className="ay" onClick={() => item.onDecision(true)}>Approve</button>
-          <button className="an" onClick={() => item.onDecision(false)}>Reject</button>
-        </div>
-      </div>
-    );
-  }
-  // message
-  const cls = "bubble" + (item.err ? " err" : "") + (item.thinking ? " thinking" : "") + (item.genImage ? " genwrap" : "");
+function ToolChip({ part }: { part: any }) {
+  const name = part.type === "dynamic-tool" ? part.toolName : String(part.type).replace(/^tool-/, "");
+  const running = part.state === "input-streaming" || part.state === "input-available";
+  const errored = part.state === "output-error";
   return (
-    <div className={"msg " + (item.role === "user" ? "user" : "bot")}>
-      <div className="who">{item.role === "user" ? "you" : "automo"}</div>
-      <div className={cls}>
-        {item.image && <img className="att" src={item.image} alt="" />}
-        {item.genImage
-          ? <><img className="gen" src={item.genImage} alt="" /><div className="imgcap">{item.genCaption}</div></>
-          : (item.thinking && !item.text ? "thinking…" : item.text)}
-        {item.streaming && <span className="cursor" />}
-      </div>
+    <div className="toolchip">
+      <span className="tk">{name}</span>
+      <span className="ta">{part.input ? "· " + argsPreview(part.input) : ""}</span>
+      <span className="tr">{running ? "running…" : errored ? "→ error" : part.output != null ? resultPreview(part.output) : ""}</span>
     </div>
   );
 }
 
+function Message({ m }: { m: any }) {
+  const isUser = m.role === "user";
+  const parts: any[] = m.parts || [];
+  const text = parts.filter((p) => p.type === "text").map((p) => p.text).join("");
+  const reasoning = parts.filter((p) => p.type === "reasoning").map((p) => p.text).join("");
+  const images = parts.filter((p) => p.type === "file" && String(p.mediaType || "").startsWith("image/"));
+  const tools = parts.filter((p) => p.type === "dynamic-tool" || String(p.type).startsWith("tool-"));
+  const gen = !isUser && images.length > 0;
+  return (
+    <>
+      {tools.map((t, i) => <ToolChip key={m.id + "t" + i} part={t} />)}
+      <div className={"msg " + (isUser ? "user" : "bot")}>
+        <div className="who">{isUser ? "you" : "automo"}</div>
+        <div className={"bubble" + (gen ? " genwrap" : "")}>
+          {images.map((im, i) => <img key={i} className={isUser ? "att" : "gen"} src={im.url} alt="" />)}
+          {text ? (gen ? <div className="imgcap">{text}</div> : text) : reasoning ? <span style={{ color: "var(--muted)", fontStyle: "italic" }}>{reasoning}</span> : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function Thread() {
-  const { thread } = useStore();
+  const { messages, status, error, regenerate } = useAutomoChat();
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { const m = ref.current?.closest("main"); if (m) m.scrollTop = m.scrollHeight; }, [thread]);
+  useEffect(() => { const mn = ref.current?.closest("main"); if (mn) mn.scrollTop = mn.scrollHeight; }, [messages, status]);
   return (
     <div className="thread" ref={ref}>
-      {thread.map((item) => <Item key={item.id} item={item} />)}
+      {messages.map((m) => <Message key={m.id} m={m} />)}
+      {status === "submitted" && (
+        <div className="msg bot"><div className="who">automo</div><div className="bubble thinking">thinking…<span className="cursor" /></div></div>
+      )}
+      {error && (
+        <div className="msg bot"><div className="who">automo</div>
+          <div className="bubble err">Couldn't complete the turn ({error.message}). Check the connection + bridge in settings.{" "}
+            <a href="#" onClick={(e) => { e.preventDefault(); regenerate(); }}>retry</a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
