@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 const shimsDir = join(dirname(fileURLToPath(import.meta.url)), "src/lib/mcp/shims");
 const NODE_SHIMS: Record<string, string> = {
   "node:process": "process.ts", "node:fs": "fs.ts", "node:fs/promises": "fs-promises.ts",
-  "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "zlib.ts",
+  "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "node-zlib.ts", // full surface incl. constants (just-bash)
 };
 const nodeShimPlugin = {
   name: "node-shims",

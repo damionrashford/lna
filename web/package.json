@@ -10,6 +10,8 @@
   "dependencies": {
     "@ai-sdk/react": "^4.0.32",
     "@automo/inference": "workspace:*",
+    "@huggingface/transformers": "^3.0.0",
+    "@mlc-ai/web-llm": "^0.2.84",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.13.4",
     "@openai/agents-core": "^0.13.4",
@@ -18,9 +20,13 @@
     "ai": "^7.0.29",
     "buffer": "^6.0.3",
     "fflate": "^0.8.2",
+    "isomorphic-git": "^1.38.5",
+    "just-bash": "^3.0.2",
+    "kokoro-js": "^1.2.1",
     "openai": "^6.47.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "sql.js": "^1.14.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
