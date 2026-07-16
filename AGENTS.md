@@ -2,7 +2,7 @@
 
 AUTOMO is a **local-first browser AI agent**. It's a static page on GitHub Pages; the "backend" is the visitor's own machine — their local model, files, shell, and MCP tools — reached over Chrome's **Local Network Access (LNA)**. The page has no server it controls; it orchestrates *your* local compute.
 
-**AUTOMO is a real `@openai/agents` SandboxAgent, running in the browser.** Not a reimplementation — the actual SDK. Inference goes to the local model over LNA; the sandbox (shell, filesystem/apply_patch, skills, memory, compaction) is the SDK's, hosted on the machine by the bridge and reached over LNA. The chat surface is the **Vercel AI SDK UI** (`useChat`), driven by a custom transport that runs the agent locally.
+**AUTOMO is a real `@openai/agents` SandboxAgent, running in the browser.** Not a reimplementation — the actual SDK. Inference goes to a local model over LNA (Ollama/vLLM/HF) **or a fully in-browser WebGPU engine**; the SDK's sandbox (shell, filesystem/apply_patch, skills, memory, compaction) runs **either** on the machine via the bridge **or** entirely in-page (Pyodide + just-bash + isomorphic-git) — **bridge-optional**. There's a local voice mode and it's an installable PWA. The chat surface is the **Vercel AI SDK UI** (`useChat`), driven by a custom transport that runs the agent locally.
 
 The repo is named `lna` for historical reasons (it started as an LNA reference).
 
@@ -25,22 +25,21 @@ lna/
 │       ├── main.tsx · App.tsx · store.ts (external store) · styles.css
 │       ├── chat.tsx          ChatProvider/useAutomoChat — useChat + session persistence + multimodal + image-gen
 │       ├── components/       Header · ConnectGate · Thread · Composer · Settings · Approvals · DebugPanel
-│       └── lib/
-│           ├── agent/        index (sandbox lifecycle · sessions · snapshots · boot) · build (buildAgent + instructions) · connect (providers · models · image)
-│           ├── transport.ts  LocalAgentTransport — runs the agent, createAiSdkUiMessageStream, HITL loop, token usage
-│           ├── model.ts      provider-aware model shim (vLLM native Responses vs ChatCompletions fallback), OpenAI client over LNA
-│           ├── context.ts    AutomoContext (session · settings · env · log) + buildContext
-│           ├── sandbox.ts    BrowserSandboxClient/Session/Editor — RPC proxy to the bridge (HMAC · AbortSignal · pre-stop hooks)
-│           ├── mcp.ts · mcp-server.ts   real @modelcontextprotocol/sdk client → SDK MCPServer (elicitation · roots · tasks)
-│           ├── persist.ts · roots.ts    OPFS workspace cache + folder mirror/import; MCP roots
-│           ├── search.ts · guardrails.ts · approvals.ts · compact.ts
-│           ├── net.ts · handshake.ts    LNA fetch + bridge probe; HMAC handshake
-│           ├── idb.ts · opfs.ts         IndexedDB + OPFS / File System Access
-│           └── locks.ts · tabs.ts · wakelock.ts · badge.ts   Web Locks · BroadcastChannel · Wake Lock · Badging
+│       └── lib/              (foldered by domain; each folder's index.ts preserves `from "./X"`)
+│           ├── agent/        index (sandbox lifecycle · sessions · snapshots · boot) · build (buildAgent) · connect (providers · models · image)
+│           ├── runtime/      transport (LocalAgentTransport + HITL loop) · model (provider-aware; resolveBrainModel) · browser-model (SDK Model over transformers.js OR web-llm) · context · guardrails · compact
+│           ├── sandbox/      index (BrowserSandboxClient — bridge RPC) · persist · roots · inbrowser/ (InBrowserSandboxClient: pyodide · fs · git · client — bridge-less)
+│           ├── mcp/          index (instances) · server (SDK MCPServer; http + bridge-stdio + inpage transports) · inpage (in-page stdio + built-in browser server) · shims/ (node:* browser shims)
+│           ├── voice/        session · transport (RealtimeSession over local STT→model→TTS) · asr (Whisper) · tts (Kokoro) · audio (mic+VAD+playback) · pcm · config
+│           ├── net/          index (LNA fetch · bridge probe · /hw) · handshake (HMAC)
+│           ├── storage/      idb · opfs (File System Access) · sql (sql.js SQLite)
+│           ├── platform/     locks · tabs · wakelock · badge · bgfetch (Background Fetch) · pwa (share/file handlers · install)
+│           ├── tools/        search (web_search + read_url, in-browser rerank)
+│           └── hitl/         approvals (tool approval + MCP elicitation)
 ├── servers/                  @automo/servers — the local access daemon
-│   └── bridge.ts             WS ⇄ (sandbox host via UnixLocalSandboxClient + stdio pipe); HMAC-gated
+│   └── bridge.ts             WS ⇄ (sandbox host via UnixLocalSandboxClient + stdio pipe) + HTTP /hw probe; HMAC-gated
 ├── inference/                @automo/inference — hardware detection + provider-agnostic model access
-│   └── hardware.ts · provider.ts · transformers.ts   detect → recommend; Ollama / vLLM / HuggingFace / in-browser
+│   └── hardware · provider · transformers · webllm · embed   detect→recommend; Ollama/vLLM/HF/in-browser(transformers.js|web-llm); embeddings rerank
 ├── .agents/skills/           repo-hosted skills the SandboxAgent can load (skills capability, via gitRepo)
 └── .github/workflows/pages.yml   bun install + bun run build → deploy web/dist
 ```
@@ -48,9 +47,10 @@ lna/
 ## How the agent works
 
 - **Chat**: `useChat` (`@ai-sdk/react`) with `LocalAgentTransport` (in `transport.ts`). `sendMessages` converts UIMessages → agent input (text + `input_image`), runs `run(SandboxAgent, input, { sandbox, stream: true })`, and returns `createAiSdkUiMessageStream(run)` (from `@openai/agents-extensions/ai-sdk-ui`) as the UIMessage stream. No server. `chat.tsx` owns per-session `UIMessage` persistence (IndexedDB), image-gen, clear/compact/stop/regenerate.
-- **Model**: a provider layer (`@automo/inference`) over **Ollama / vLLM / HuggingFace / in-browser** (transformers.js WebGPU, roadmap), streaming over LNA. `model.ts` is provider-aware — **vLLM's native Responses transport unlocks native apply_patch + server compaction**; Ollama/HF use the `ChatCompletions`-named shim so apply_patch + structured tools fall back to function tools. Browser hardware detection recommends a model size on Connect.
-- **Capabilities** (all five, the SDK's): `shell()`, `filesystem()` (apply_patch V4A), `skills()` (lazy `gitRepo`), `memory()` (generation flushed via a session pre-stop hook), `compaction()` (server-side; a client-side fallback in `compact.ts` runs under the shim). Plus the `web_search` function tool and **MCP tools via the real SDK client** — with **elicitation** (schema forms), **roots** (the sandbox workspace), and **tasks** (long-running tool calls). One typed `AutomoContext` (session/settings/env/log) threads through every tool, guardrail, and the dynamic instructions.
-- **The sandbox is real**: `BrowserSandboxClient` (`sandbox.ts`) proxies every `SandboxSession`/`Editor` call over WS to the bridge, which runs the SDK's **`UnixLocalSandboxClient`** — real processes, real diffs, real snapshots.
+- **Model**: a provider layer (`@automo/inference`) over **Ollama / vLLM / HuggingFace / in-browser**. In-browser is real: `browser` = transformers.js (ONNX), `webllm` = MLC web-llm — both drive the agent through `BrowserModel` (a custom SDK `Model`). `runtime/model.ts` is provider-aware (vLLM native Responses = native apply_patch + compaction; Ollama/HF = `ChatCompletions` shim) and exposes `resolveBrainModel()` so **voice reuses the same model** (no second brain). Hardware detection (WebGPU incl. maxStorageBinding + VRAM budget · oscpu · WebGL renderer · WASM SIMD+threads · mobile · battery), idle-scheduled and refined by the bridge `/hw` probe, recommends a size on Connect.
+- **Capabilities** (the SDK's): `shell()`, `filesystem()` (apply_patch V4A), `skills()` (lazy `gitRepo`), `memory()`, `compaction()`. Plus `web_search` + `read_url` (in-browser semantic rerank / focus-passage extraction via `inference/embed.ts`) and **MCP via the real SDK client** — with **three transports** (http · bridge-stdio · **in-page stdio** over `node:*` shims) and elicitation / roots / tasks. One typed `AutomoContext` threads through everything.
+- **The sandbox — two backends**: `sandbox/index.ts` `BrowserSandboxClient` proxies over WS to the bridge's `UnixLocalSandboxClient` (real machine); `sandbox/inbrowser/` `InBrowserSandboxClient` implements the same SDK interface in-page (Pyodide + just-bash + isomorphic-git + the SDK's `applyDiff`), selectable in Settings. `ensureSandbox()` swaps clients; the agent is unchanged.
+- **Voice**: `voice/` — a `RealtimeSession` (`@openai/agents-realtime`) over a custom in-browser transport (Whisper→shared model→Kokoro, AudioWorklet mic + VAD + barge-in), transcripts bridged into the chat thread.
 - **Human-in-the-loop** (`transport.ts` + `approvals.ts`): tools with `needsApproval` pause the run (`result.interruptions`); the transport wraps the pause→approve→resume loop in one `createUIMessageStream` (`writer.merge` per run), awaits the user's decision via the approval registry, then `state.approve/reject` and resumes from `result.state` — all within one streamed chat turn.
 - **Guardrails** (`guardrails.ts`): agent `inputGuardrails`/`outputGuardrails` + tool `inputGuardrails`/`outputGuardrails` on `web_search`, gated on the `guardrails` setting. Focused on credential safety.
 - **Sessions & snapshots**: multi-conversation history (IndexedDB, UIMessages); snapshots persist the real sandbox workspace (`persistWorkspace` tar) + conversation.
@@ -71,13 +71,13 @@ bun run bridge        # BRIDGE_TOKEN=dev bun servers/bridge.ts → 127.0.0.1:796
 
 1. **LNA permission** — public page → `localhost` prompts; user clicks Allow (Chrome ≥142, or the flag on 138–141).
 2. **CORS** — Ollama must allow the origin: `OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve`. AUTOMO diagnoses this exactly (a no-cors probe distinguishes "running but blocked" from "down").
-3. **Ollama running + a model pulled** (in-browser via `/api/pull`). The **bridge** must run for the sandbox (shell/filesystem/skills/memory); chat-only + web_search-via-proxy work without it.
+3. **Ollama running + a model pulled** (in-browser via `/api/pull`). The **bridge is optional**: chat + web_search work without it, and the **in-browser sandbox** (Settings) gives shell/filesystem/git in-page with nothing installed. Run the bridge for the *real* machine (real files, native binaries) + exact `/hw` sizing. A fully in-browser stack (WebGPU model + Pyodide sandbox + in-page MCP + voice) needs no daemon at all.
 
 ## Conventions
 
 - **Bun** everywhere. `web/` is React + Tailwind, compiled by the **React Compiler** and bundled by `bun build` to static `dist/`. `build.ts` also injects the SEO `<head>`, generates the service worker, and copies `public/`; the site URL is derived (CNAME → repo → env), never hardcoded. Verify UI with a screenshot; verify agent runs against a live bridge + Ollama (the Node-safe path in `sandbox.ts`/`transport.ts` runs under Bun for smoke tests).
 - **Non-hosted by default** — the model is local; nothing touches a hosted service.
-- `@openai/agents/sandbox/local` (`UnixLocalSandboxClient`) is **Node-only** — import it ONLY in `servers/bridge.ts`, never in the browser bundle. The browser bundles `@openai/agents` core, `@openai/agents/sandbox` (SandboxAgent, capabilities, Manifest), `@openai/agents-extensions/ai-sdk-ui`, the raw `@modelcontextprotocol/sdk` client (browser-safe Streamable HTTP + our bridge-stdio transport; the SDK's own browser MCP classes are stubs that throw), the `@automo/inference` workspace, `ai`, and `@ai-sdk/react`. Three-workspace Bun repo: `web/` · `servers/` · `inference/`. No file over ~235 LOC; `agent/` is split (index/build/connect).
+- `@openai/agents/sandbox/local` (`UnixLocalSandboxClient`) is **Node-only** — import it ONLY in `servers/bridge.ts`, never in the browser bundle. The browser bundles `@openai/agents` (+ `-core`, `-realtime`, `-extensions/ai-sdk-ui`), the raw `@modelcontextprotocol/sdk` client (the SDK's browser MCP classes are stubs that throw), `@automo/inference`, `ai`, `@ai-sdk/react`; and — when installed — the heavy in-browser deps (`@huggingface/transformers`, `@mlc-ai/web-llm`, `kokoro-js`, `sql.js`, `isomorphic-git`, `just-bash`; Pyodide from CDN). `build.ts` **conditionally externalizes** whichever of those aren't installed (dep-gated call sites throw a friendly message until added) and **aliases `node:*` → the `mcp/shims/`** so a bundled Node MCP server runs in-page. Three-workspace Bun repo: `web/` · `servers/` · `inference/`. **No file over ~235 LOC.**
 
 ## Deploy
 
