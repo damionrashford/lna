@@ -154,6 +154,12 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .mcprow .mc{margin-left:auto;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid)}
 .mcprow .mx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px}
 .mcprow .mx:hover{color:var(--err)}
+.approve{align-self:flex-start;max-width:80%;background:var(--surface);border:1px solid var(--warn);border-radius:var(--r-sm);padding:11px 14px;display:flex;flex-direction:column;gap:9px}
+.approve .at{font-size:0.85rem;color:var(--ink)} .approve .at b{color:var(--coral);font-family:var(--mono);font-size:0.82rem}
+.approve .aa{display:block;font-family:var(--mono);font-size:0.72rem;color:var(--muted);margin-top:3px}
+.approve .ab{display:flex;gap:8px}
+.approve button{border:none;border-radius:var(--r-sm);padding:6px 16px;font-size:0.78rem;font-weight:600;cursor:pointer}
+.approve .ay{background:var(--coral);color:var(--coral-ink)} .approve .an{background:var(--surface-2);color:var(--ink-mid);border:1px solid var(--border)}
 
 /* settings drawer */
 .scrim{position:fixed;inset:0;background:oklch(10% 0.01 275 / 0.6);backdrop-filter:blur(3px);opacity:0;
@@ -278,7 +284,9 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
         <input id="mcp-target" placeholder="https://…/mcp   or   npx -y @modelcontextprotocol/server-everything" style="flex:1;min-width:160px">
         <button id="mcp-add" style="background:var(--coral);color:var(--coral-ink);border:none;border-radius:var(--r-sm);padding:0 15px;font-weight:600;font-size:0.8rem;cursor:pointer">Add</button>
       </div>
-      <div class="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local servers). <b>stdio</b> runs the command through the bridge daemon (<code>bun servers/bridge.ts</code>) over LNA. The server's tools become the agent's tools.</div></div>
+      <input id="mcp-auth" placeholder="auth token (optional, for HTTP servers)" style="margin-top:6px;width:100%">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.82rem;color:var(--ink-mid);cursor:pointer"><input type="checkbox" id="set-approve"> Require approval before running any tool call</label>
+      <div class="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local; auth + headers supported). <b>stdio</b> runs the command through the bridge daemon over LNA. Tools become the agent's tools (prefixed <code>mcp_&lt;label&gt;_</code>). Hosted MCP tools aren't listed — they route through OpenAI's Responses API and need an OpenAI model, not a local one.</div></div>
     <div>
       <label style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Local capabilities</label>
       <div class="caps" style="margin-top:9px">
@@ -304,6 +312,8 @@ const store = {
   set vision(v){ localStorage.setItem('automo.vision', v); },
   get image(){ return localStorage.getItem('automo.image') || ''; },
   set image(v){ localStorage.setItem('automo.image', v); },
+  get approve(){ return localStorage.getItem('automo.approve') === '1'; },
+  set approve(v){ localStorage.setItem('automo.approve', v ? '1' : '0'); },
   get chat(){ try{ return JSON.parse(localStorage.getItem('automo.chat')||'[]'); }catch{ return []; } },
   set chat(v){ localStorage.setItem('automo.chat', JSON.stringify(v.slice(-100))); },
 };
@@ -565,12 +575,13 @@ try { mcpServers = JSON.parse(localStorage.getItem('automo.mcp') || '[]'); } cat
 const mcpConns = {};        // label → live stdio connection
 let mcpRegistry = {};       // model tool name → { server, tool }
 let _mcpId = 0;
-function saveMcp() { localStorage.setItem('automo.mcp', JSON.stringify(mcpServers.map((s) => ({ label: s.label, transport: s.transport, url: s.url, cmd: s.cmd, bridge: s.bridge, token: s.token })))); }
+function saveMcp() { localStorage.setItem('automo.mcp', JSON.stringify(mcpServers.map((s) => ({ label: s.label, transport: s.transport, url: s.url, cmd: s.cmd, bridge: s.bridge, token: s.token, auth: s.auth, headers: s.headers, allowed: s.allowed, blocked: s.blocked })))); }
 function mcpKey(label, tool) { return ('mcp_' + label + '_' + tool).replace(/[^a-zA-Z0-9_-]/g, '_'); }
 
 // Streamable HTTP transport: POST JSON-RPC; response is JSON or an SSE stream; carry Mcp-Session-Id.
 async function mcpHttp(server, msg) {
-  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18' };
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18', ...(server.headers || {}) };
+  if (server.auth) headers['Authorization'] = /^Bearer /i.test(server.auth) ? server.auth : 'Bearer ' + server.auth;
   if (server._sid) headers['Mcp-Session-Id'] = server._sid;
   const res = await localFetch(server.url, { method: 'POST', headers, body: JSON.stringify(msg) });
   const sid = res.headers.get('Mcp-Session-Id'); if (sid) server._sid = sid;
@@ -626,13 +637,31 @@ async function mcpCall(server, tool, args) {
 }
 function mcpTools() {
   mcpRegistry = {}; const out = [];
-  for (const s of mcpServers) { if (!s.connected) continue; for (const t of (s.tools || [])) { const k = mcpKey(s.label, t.name); mcpRegistry[k] = { server: s, tool: t.name }; out.push({ type: 'function', name: k, description: '[' + s.label + '] ' + (t.description || t.name), parameters: t.inputSchema || { type: 'object', properties: {} } }); } }
+  for (const s of mcpServers) { if (!s.connected) continue; for (const t of (s.tools || [])) {
+    if (s.allowed && s.allowed.length && !s.allowed.includes(t.name)) continue; // tool filter (allowlist)
+    if (s.blocked && s.blocked.includes(t.name)) continue;                       // tool filter (blocklist)
+    const k = mcpKey(s.label, t.name); mcpRegistry[k] = { server: s, tool: t.name };
+    out.push({ type: 'function', name: k, description: '[' + s.label + '] ' + (t.description || t.name), parameters: t.inputSchema || { type: 'object', properties: {} } });
+  } }
   return out;
 }
 function renderMcpList() {
   const el = $('#mcp-list'); if (!el) return;
   el.innerHTML = mcpServers.map((s, i) => `<div class="mcprow"><span class="dot ${s.connected ? 'ok' : (s.error ? 'err' : '')}"></span><span class="ml">${s.label}</span><span class="mt">${s.transport}</span><span class="mc">${s.connected ? (s.tools.length + ' tools') : (s.error ? 'error' : '…')}</span><button data-i="${i}" class="mx">×</button></div>`).join('') || '<div class="note" style="margin:0">none</div>';
   el.querySelectorAll('.mx').forEach((b) => b.onclick = () => { const i = +b.dataset.i; try { mcpConns[mcpServers[i].label]?.close(); } catch {} mcpServers.splice(i, 1); saveMcp(); renderMcpList(); });
+}
+
+// human-in-the-loop: approve/reject a tool call before it runs
+function approveToolCall(name, argsStr) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div'); el.className = 'approve';
+    el.innerHTML = `<div class="at">Run <b></b>? <span class="aa"></span></div><div class="ab"><button class="ay">Approve</button><button class="an">Reject</button></div>`;
+    el.querySelector('b').textContent = name; el.querySelector('.aa').textContent = (argsStr || '').slice(0, 120);
+    $('#thread').appendChild(el); scrollDown();
+    const done = (ok) => { el.remove(); resolve(ok); };
+    el.querySelector('.ay').onclick = () => done(true);
+    el.querySelector('.an').onclick = () => done(false);
+  });
 }
 
 // tool-call chip in the thread
@@ -712,6 +741,10 @@ async function send() {
       // record the model's tool calls, execute them in the browser, feed results back
       for (const c of calls) {
         convo.push({ type: 'function_call', call_id: c.call_id, name: c.name, arguments: c.args });
+        if (store.approve) { // human-in-the-loop gate
+          const ok = await approveToolCall(c.name, c.args);
+          if (!ok) { toolChip(c.name, c.args).setResult('rejected'); convo.push({ type: 'function_call_output', call_id: c.call_id, output: 'The user REJECTED this tool call. Do not retry it; continue without it.' }); continue; }
+        }
         const chip = toolChip(c.name, c.args);
         let output; try { output = await execTool(c.name, JSON.parse(c.args || '{}')); } catch (e) { output = 'ERROR: ' + e.message; }
         const spill = await maybeSpill(c.name, output); // big/MCP outputs → OPFS, model reads back with mem_read
@@ -813,12 +846,14 @@ $('#pull-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') pull
 $('#grant-folder').addEventListener('click', grantFolder);
 $('#mcp-add').addEventListener('click', () => {
   const label = ($('#mcp-label').value || 'mcp').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-  const transport = $('#mcp-transport').value; const target = $('#mcp-target').value.trim();
+  const transport = $('#mcp-transport').value; const target = $('#mcp-target').value.trim(); const auth = $('#mcp-auth').value.trim();
   if (!target) return;
-  const server = transport === 'http' ? { label, transport, url: target } : { label, transport, cmd: target, bridge: 'ws://127.0.0.1:7967/ws', token: 'dev' };
+  const server = transport === 'http' ? { label, transport, url: target, auth: auth || undefined } : { label, transport, cmd: target, bridge: 'ws://127.0.0.1:7967/ws', token: 'dev' };
   mcpServers.push(server); saveMcp(); renderMcpList(); mcpConnect(server);
-  $('#mcp-label').value = ''; $('#mcp-target').value = '';
+  $('#mcp-label').value = ''; $('#mcp-target').value = ''; $('#mcp-auth').value = '';
 });
+$('#set-approve').checked = store.approve;
+$('#set-approve').addEventListener('change', (e) => { store.approve = e.target.checked; });
 
 // ---- boot ----
 setStatus('', 'not connected');
