@@ -152,6 +152,15 @@ footer{border-top:1px solid var(--border); padding:calc(var(--u)*3) 0 calc(var(-
   font-size:var(--t-sm); color:var(--ink-muted)}
 footer .wordmark{font-family:var(--font-mono); font-weight:600; color:var(--ink)}
 
+/* lab */
+.lab-row{display:flex; gap:calc(var(--u)*1); flex-wrap:wrap; margin-bottom:calc(var(--u)*2)}
+.lab-row input, .lab-row select{font-family:var(--font-mono); font-size:var(--t-sm); color:var(--ink);
+  background:var(--paper); border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:9px 12px}
+.lab-row input{flex:1; min-width:220px}
+.lab-row .btn{border:none; cursor:pointer; font-family:var(--font-sans)}
+.mono-out{font-family:var(--font-mono); font-size:0.8rem !important}
+#lab-out{min-height:72px}
+
 /* sweep reveal (Narrative Workflow) */
 @media (prefers-reduced-motion: no-preference){
   .stage .stage-rule{opacity:0; transform:translateX(-16px); transition:opacity .5s ease, transform .5s ease}
@@ -170,6 +179,7 @@ footer .wordmark{font-family:var(--font-mono); font-weight:600; color:var(--ink)
   <a href="#limits">5.0</a>
   <a href="#timeline">6.0</a>
   <a href="#prepare">7.0</a>
+  <a href="#lab">8.0</a>
 </nav>
 
 <header class="hero wrap" id="top">
@@ -433,6 +443,39 @@ fetch(req);</code></pre>
   </div>
 </section>
 
+<!-- ============================================================ 8.0 -->
+<section class="stage" id="lab">
+  <div class="stage-rule">
+    <span class="stage-num">8.0</span>
+    <h2 class="stage-title">Live lab</h2>
+    <span class="stage-what">test LNA against your own machine, from this page</span>
+  </div>
+  <div class="prose">
+    <p>This page is served from a <span class="pill public">public</span> origin, so any request it makes to your machine is a real local network request — the exact setup LNA gates. Run a local endpoint, then probe it from here. If your browser enforces LNA (Chrome 138+ with <code>chrome://flags/#local-network-access-check</code> set to "Enabled (Blocking)", or Chrome 142+), the probe triggers the permission prompt.</p>
+<pre><code># a CORS-enabled test daemon, from this page's repo:
+curl -sO https://raw.githubusercontent.com/damionrashford/lna/main/test-server.ts
+bun test-server.ts     # → http://127.0.0.1:7966/</code></pre>
+    <h3>Permission state</h3>
+    <p class="small muted">Live from <code>navigator.permissions.query</code> — updates after each probe.</p>
+    <div class="cards" id="perm-cards">
+      <div class="card"><span class="tag local">local-network</span><p id="perm-local" class="mono-out">…</p></div>
+      <div class="card"><span class="tag loopback">loopback-network</span><p id="perm-loopback" class="mono-out">…</p></div>
+      <div class="card"><span class="tag public">local-network-access</span><p id="perm-alias" class="mono-out">…</p></div>
+    </div>
+    <h3>Probe</h3>
+    <div class="lab-row">
+      <input id="lab-url" type="url" value="http://127.0.0.1:7966/" spellcheck="false" aria-label="Local endpoint URL">
+      <select id="lab-space" aria-label="targetAddressSpace">
+        <option value="loopback" selected>loopback</option>
+        <option value="local">local</option>
+      </select>
+      <button class="btn primary" id="lab-go" type="button">Probe →</button>
+    </div>
+    <pre id="lab-out" aria-live="polite"><code>// results appear here</code></pre>
+    <p class="small muted">The probe runs <code>fetch(url, { targetAddressSpace })</code>. A grant lets the connection through; reading the response still requires the endpoint to send CORS headers — LNA gates the <em>connection</em>, CORS gates the <em>read</em>.</p>
+  </div>
+</section>
+
 <!-- ============================================================ refs -->
 <section class="refs" id="sources">
   <h2>Sources</h2>
@@ -462,6 +505,46 @@ const io = new IntersectionObserver((entries) => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
 }, { threshold: 0.15 });
 document.querySelectorAll(".stage").forEach((s) => io.observe(s));
+
+// ---- 8.0 live lab ----
+const permEls = { "local-network": "perm-local", "loopback-network": "perm-loopback", "local-network-access": "perm-alias" };
+async function refreshPerms() {
+  for (const [name, id] of Object.entries(permEls)) {
+    const el = document.getElementById(id);
+    try {
+      const s = await navigator.permissions.query({ name });
+      el.textContent = s.state;
+      s.onchange = () => { el.textContent = s.state; };
+    } catch {
+      el.textContent = "not recognized by this browser";
+    }
+  }
+}
+refreshPerms();
+
+const out = document.querySelector("#lab-out code");
+document.getElementById("lab-go").addEventListener("click", async () => {
+  const url = document.getElementById("lab-url").value;
+  const space = document.getElementById("lab-space").value;
+  const t0 = performance.now();
+  out.textContent = `fetch("${url}", { targetAddressSpace: "${space}" }) …`;
+  try {
+    const res = await fetch(url, { targetAddressSpace: space });
+    const ms = Math.round(performance.now() - t0);
+    let body = "";
+    try { body = (await res.text()).slice(0, 400); } catch { body = "(body unreadable)"; }
+    out.textContent = `→ HTTP ${res.status} in ${ms}ms\n${body}`;
+  } catch (err) {
+    const ms = Math.round(performance.now() - t0);
+    out.textContent =
+      `→ ${err.name}: ${err.message} (${ms}ms)\n\n` +
+      `A TypeError here means the request was blocked or unreadable:\n` +
+      `· LNA permission denied, or browser doesn't enforce LNA yet\n` +
+      `· endpoint not running (bun test-server.ts)\n` +
+      `· endpoint lacks CORS headers (connection may still have been allowed)`;
+  }
+  refreshPerms();
+});
 </script>
 </body>
 </html>
