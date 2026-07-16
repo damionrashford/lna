@@ -78,6 +78,44 @@ export async function detectHardware(): Promise<HardwareProfile> {
 
 export interface ModelRecommendation { tier: "cpu" | "small" | "medium" | "large"; note: string; examples: string[]; canRunInBrowser: boolean }
 
+// Exact host hardware, measured by the bridge (system_profiler / sysctl / nvidia-smi) rather than the
+// browser's privacy-limited APIs. Present only when the local bridge is running. Refines the coarse
+// browser recommendation — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64 GB Apple Silicon box
+// looks like an 8 GB box until the bridge reports the real numbers.
+export interface BridgeHardware {
+  os: string;                  // "darwin" | "linux" | "win32"
+  ramGiB: number | null;       // total system RAM
+  vramGiB: number | null;      // dedicated GPU memory (≈ ramGiB on unified-memory Apple Silicon)
+  cpuCores: number | null;
+  chip: string | null;         // e.g. "Apple M2 Pro" or the Intel/AMD brand string
+  gpuName: string | null;
+  appleSilicon: boolean;       // unified memory ⇒ the GPU can address most of system RAM
+  source: string;              // which probes answered ("sysctl", "nvidia-smi", …)
+}
+
+// One-line human summary of the exact host hardware, for the Connect screen.
+export function bridgeSummary(hw: BridgeHardware): string {
+  const mem = hw.appleSilicon && hw.ramGiB
+    ? `${hw.ramGiB}GB unified`
+    : [hw.vramGiB ? `${hw.vramGiB}GB VRAM` : null, hw.ramGiB ? `${hw.ramGiB}GB RAM` : null].filter(Boolean).join(" · ");
+  return [hw.chip || hw.gpuName, mem].filter(Boolean).join(" · ");
+}
+
+// Refine the recommendation with exact host memory. The model has to fit in GPU memory to run fast;
+// on unified-memory Apple Silicon that's (most of) system RAM, on a discrete GPU it's VRAM. `browser`
+// carries WebGPU-derived canRunInBrowser through unchanged (the bridge can't see the browser's GPU).
+export function recommendFromBridge(hw: BridgeHardware, browser?: ModelRecommendation): ModelRecommendation {
+  const ram = hw.ramGiB ?? 4;
+  const mem = hw.appleSilicon ? ram : Math.max(hw.vramGiB ?? 0, 0);
+  const canRunInBrowser = browser?.canRunInBrowser ?? false;
+  const where = hw.appleSilicon ? `${ram}GB unified memory` : `${mem}GB VRAM`;
+  if (mem < 6) return { tier: "small", note: `${where} — a 3–4B model comfortably.`, examples: ["llama3.2:3b", "qwen3:4b"], canRunInBrowser };
+  if (mem < 12) return { tier: "medium", note: `${where} — a 7–8B model, or a 14B quantized.`, examples: ["qwen3:8b", "gpt-oss:20b (Q4)"], canRunInBrowser };
+  if (mem < 24) return { tier: "medium", note: `${where} — a 14B, or a 20B quantized.`, examples: ["qwen3:14b", "gpt-oss:20b (Q4)"], canRunInBrowser };
+  if (mem < 48) return { tier: "large", note: `${where} — a 32B, or a 20B at full precision.`, examples: ["qwen3:32b", "gpt-oss:20b"], canRunInBrowser };
+  return { tier: "large", note: `${where} — a 70B quantized, or 32B at full precision.`, examples: ["llama3.3:70b (Q4)", "qwen3:32b"], canRunInBrowser };
+}
+
 // Heuristic model-size recommendation. RAM/unified-memory dominates on Apple Silicon; GPU tier + f16
 // gate whether in-browser WebGPU inference is worth attempting.
 export function recommendModel(p: HardwareProfile): ModelRecommendation {

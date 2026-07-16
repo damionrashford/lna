@@ -37,6 +37,59 @@ const sandboxClient = new UnixLocalSandboxClient();
 const u8ToB64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
 const b64ToU8 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
 
+// ---- host hardware probe (read-only; refines the browser's coarse recommendation) ----
+// Run a fixed, argument-free read-only command with a hard timeout; never spawns anything the caller
+// influences, so the /hw route stays safe to serve unauthenticated (same class as the liveness root).
+async function sh(cmd: string[], ms = 4000): Promise<string> {
+  try {
+    const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, ms);
+    const out = await new Response(proc.stdout).text();
+    clearTimeout(timer);
+    await proc.exited;
+    return out.trim();
+  } catch { return ""; }
+}
+const GiB = (bytes: number) => Math.round(bytes / 2 ** 30);
+
+let hwCache: any = null; // measured once per process — hardware doesn't change under us
+async function probeHostHardware() {
+  if (hwCache) return hwCache;
+  const os = process.platform;
+  const hw: any = { os, ramGiB: null, vramGiB: null, cpuCores: null, chip: null, gpuName: null, appleSilicon: false, source: "" };
+  if (os === "darwin") {
+    const [mem, cores, brand] = await Promise.all([
+      sh(["sysctl", "-n", "hw.memsize"]),
+      sh(["sysctl", "-n", "hw.logicalcpu"]),
+      sh(["sysctl", "-n", "machdep.cpu.brand_string"]),
+    ]);
+    if (Number(mem) > 0) hw.ramGiB = GiB(Number(mem));
+    if (Number(cores) > 0) hw.cpuCores = Number(cores);
+    hw.chip = brand || null;
+    hw.appleSilicon = /Apple/i.test(brand);
+    if (hw.appleSilicon) { hw.gpuName = brand; hw.vramGiB = hw.ramGiB; } // unified memory
+    hw.source = "sysctl";
+  } else {
+    const smi = await sh(["nvidia-smi", "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"]);
+    if (smi) {
+      const [vram, ...name] = smi.split("\n")[0].split(",");
+      if (Number(vram) > 0) hw.vramGiB = Math.round((Number(vram) / 1024) * 10) / 10; // MiB → GiB
+      hw.gpuName = name.join(",").trim() || null;
+      hw.source = "nvidia-smi";
+    }
+    if (os === "linux") {
+      try {
+        const kb = Number((await Bun.file("/proc/meminfo").text()).match(/MemTotal:\s+(\d+)/)?.[1]);
+        if (kb > 0) { hw.ramGiB = GiB(kb * 1024); hw.source = [hw.source, "proc"].filter(Boolean).join("+"); }
+      } catch { /* no /proc */ }
+      const cores = navigator?.hardwareConcurrency;
+      if (cores) hw.cpuCores = cores;
+    }
+  }
+  hwCache = hw;
+  return hw;
+}
+
 // Auth: the browser proves it knows TOKEN by returning HMAC-SHA256(TOKEN, per-connection nonce), so
 // the token itself never crosses the wire and a captured handshake can't be replayed. Web Crypto
 // (SubtleCrypto) ships in Bun. A plaintext token is still accepted for older clients.
@@ -111,6 +164,7 @@ const server = Bun.serve<Conn, {}>({
       return new Response("upgrade failed", { status: 400 });
     }
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+    if (url.pathname === "/hw") return probeHostHardware().then((hw) => Response.json(hw, { headers: { ...CORS, "Content-Type": "application/json" } }));
     return Response.json(
       { ok: true, daemon: "lna-bridge", ws: `ws://127.0.0.1:${PORT}/ws`, allow: [...ALLOW], sandbox: true, authRequired: true },
       { headers: { ...CORS, "Content-Type": "application/json" } },

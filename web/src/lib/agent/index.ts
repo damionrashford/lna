@@ -3,7 +3,8 @@
 // connection live in ./build and ./connect (re-exported here so `from "./agent"` stays the entry point).
 import { Manifest, gitRepo } from "@openai/agents/sandbox";
 import { S, set, getState, setStatus, setMachine } from "../../store";
-import { detectHardware, recommendModel } from "@automo/inference";
+import { detectHardware, recommendModel, recommendFromBridge, bridgeSummary } from "@automo/inference";
+import { probeBridgeHardware } from "../net";
 import { idbGet, idbSet } from "../idb";
 import { getFsRoot } from "../opfs";
 import { BrowserSandboxClient, u8ToB64 } from "../sandbox";
@@ -148,11 +149,18 @@ export async function boot() {
   setStatus("", "not connected");
   initWakeLock();
   initTabs();
-  // detect the machine and recommend a model size (browser APIs; refined by the bridge later)
-  detectHardware().then((p) => {
+  // detect the machine and recommend a model size (coarse browser APIs), then refine with the bridge's
+  // exact RAM/VRAM/chip if it's running — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box
+  // reads as 8GB until the bridge reports real numbers.
+  detectHardware().then(async (p) => {
     const rec = recommendModel(p);
     const summary = [p.gpu?.description || p.gpu?.vendor || null, p.ramGiB ? `${p.ramGiB}GB` : null, p.arch, p.platform].filter(Boolean).join(" · ");
     setMachine({ tier: rec.tier, note: rec.note, examples: rec.examples, summary });
+    const hw = await probeBridgeHardware();
+    if (hw?.ramGiB || hw?.vramGiB) {
+      const exact = recommendFromBridge(hw, rec);
+      setMachine({ tier: exact.tier, note: exact.note, examples: exact.examples, summary: bridgeSummary(hw) });
+    }
   }).catch(() => { /* detection best-effort */ });
   restoreFolder();
   requestDurable(); // keep the OPFS workspace cache from being evicted

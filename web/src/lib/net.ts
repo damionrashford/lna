@@ -22,6 +22,16 @@ export async function probeBridge() {
   setCap("bridge", "", "not running");
 }
 
+// ask the bridge for exact host hardware (RAM/VRAM/chip) to refine the browser's coarse recommendation.
+// Returns null when the bridge isn't running — detection then stays at the WebGPU-derived estimate.
+export async function probeBridgeHardware(): Promise<any | null> {
+  try {
+    const res = await localFetch("http://localhost:7967/hw", { method: "GET" });
+    if (res.ok) return await res.json();
+  } catch { /* bridge not running */ }
+  return null;
+}
+
 // classify a URL's target address space (loopback / local LAN) for LNA-hinted fetches
 export function spaceFor(url: string): "loopback" | "local" | null {
   try {
