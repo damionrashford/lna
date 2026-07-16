@@ -146,9 +146,11 @@ export async function boot() {
   const { reconnectSaved } = await import("../mcp/index");
   const { initWakeLock } = await import("../platform/wakelock");
   const { initTabs } = await import("../platform/tabs");
+  const { initPwa } = await import("../platform/pwa");
   setStatus("", "not connected");
   initWakeLock();
   initTabs();
+  initPwa(); // Share Target / File Handlers / install prompt for the installed PWA
   // detect the machine and recommend a model size (coarse browser APIs), then refine with the bridge's
   // exact RAM/VRAM/chip if it's running — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box
   // reads as 8GB until the bridge reports real numbers. Runs at idle (Background Tasks API) so it never

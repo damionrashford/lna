@@ -6,12 +6,28 @@
   "start_url": "__BASE__",
   "scope": "__BASE__",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#14131a",
   "theme_color": "#14131a",
   "categories": ["productivity", "developer", "utilities"],
   "lang": "en-US",
   "dir": "ltr",
+  "launch_handler": { "client_mode": "focus-existing" },
+  "share_target": {
+    "action": "__BASE__",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
+  "file_handlers": [
+    { "action": "__BASE__", "accept": { "text/*": [".txt", ".md", ".markdown", ".log", ".csv"], "application/json": [".json"] } }
+  ],
+  "protocol_handlers": [
+    { "protocol": "web+automo", "url": "__BASE__?cmd=%s" }
+  ],
+  "shortcuts": [
+    { "name": "New chat", "short_name": "New", "url": "__BASE__?new=1" }
+  ],
   "icons": [
     { "src": "__BASE__favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
     { "src": "__BASE__icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },

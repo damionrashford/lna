@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore, S } from "../store";
+import { useStore, S, setIntake } from "../store";
 import { setAttachment, clearAttachment, toggleImageMode } from "../lib/agent";
 import { startVoice, stopVoice } from "../lib/voice";
 import { useAutomoChat } from "../chat";
@@ -9,7 +9,7 @@ function fileToDataURL(file: File): Promise<string> {
 }
 
 export default function Composer() {
-  const { attached, imageMode, voice } = useStore();
+  const { attached, imageMode, voice, intake } = useStore();
   const toggleVoice = () => { if (voice.active) void stopVoice(); else void startVoice(); };
   const { busy, sendText, sendImage, generateImage, stop } = useAutomoChat();
   const [value, setValue] = useState("");
@@ -18,6 +18,9 @@ export default function Composer() {
 
   const autosize = () => { const i = ta.current; if (!i) return; i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 180) + "px"; };
   useEffect(autosize, [value]);
+
+  // content shared/opened into the installed PWA (Share Target / File Handlers) → prefill the composer
+  useEffect(() => { if (intake) { setValue((v) => (v ? v + "\n" + intake : intake)); setIntake(null); ta.current?.focus(); } }, [intake]);
 
   const submit = () => {
     if (busy) return;

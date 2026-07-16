@@ -41,6 +41,8 @@ export interface State {
   tasks: TaskInfo[];
   machine: MachineInfo | null;
   voice: VoiceState;
+  intake: string | null;   // text shared/opened into the installed PWA, to prefill the composer
+  canInstall: boolean;     // a beforeinstallprompt was captured (show an Install affordance)
 }
 
 let state: State = {
@@ -72,6 +74,8 @@ let state: State = {
   tasks: [],
   machine: null,
   voice: { active: false, state: "idle" },
+  intake: null,
+  canInstall: false,
 };
 
 const listeners = new Set<() => void>();
@@ -109,6 +113,8 @@ export function logEvent(level: LogEntry["level"], msg: string) {
 export function setUsage(u: Usage | null) { set({ usage: u }); }
 export function setMachine(m: MachineInfo | null) { set({ machine: m }); }
 export function setVoice(v: VoiceState) { set({ voice: v }); }
+export function setIntake(text: string | null) { set({ intake: text }); }
+export function setCanInstall(v: boolean) { set({ canInstall: v }); }
 
 // upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
 export function updateTask(server: string, tool: string, status: string) {
