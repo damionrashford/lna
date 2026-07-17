@@ -163,6 +163,10 @@ main.gate-mode{display:flex;flex-direction:column}
 .mcprow .mc{margin-left:auto;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid)}
 .mcprow .mx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px}
 .mcprow .mx:hover{color:var(--err)}
+.approve-dialog{border:none;background:transparent;padding:0;max-width:min(520px,92vw);color:var(--ink)}
+.approve-dialog::backdrop{background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)}
+.approve-dialog .approve{max-width:none}
+.approve-dialog .approve + .approve{margin-top:10px}
 .approve{align-self:flex-start;max-width:80%;background:var(--surface);border:1px solid var(--warn);border-radius:var(--r-sm);padding:11px 14px;display:flex;flex-direction:column;gap:9px}
 .approve .at{font-size:0.85rem;color:var(--ink)} .approve .at b{color:var(--coral);font-family:var(--mono);font-size:0.82rem}
 .approve .aa{display:block;font-family:var(--mono);font-size:0.72rem;color:var(--muted);margin-top:3px}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore, S, setIntake } from "../store";
 import { setAttachment, clearAttachment, toggleImageMode } from "../lib/agent";
+import { captureScreen } from "../lib/platform/screen";
 import { startVoice, stopVoice } from "../lib/voice";
 import { useAutomoChat } from "../chat";
 
@@ -11,6 +12,8 @@ function fileToDataURL(file: File): Promise<string> {
 export default function Composer() {
   const { attached, imageMode, voice, intake } = useStore();
   const toggleVoice = () => { if (voice.active) void stopVoice(); else void startVoice(); };
+  const grabScreen = async () => { try { setAttachment(await captureScreen()); } catch { /* user cancelled the picker, or capture unsupported */ } };
+  const canCapture = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
   const { busy, sendText, sendImage, generateImage, stop } = useAutomoChat();
   const [value, setValue] = useState("");
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -71,6 +74,11 @@ export default function Composer() {
         >
           <svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v4" /></svg>
         </button>
+        {canCapture && (
+          <button className="cbtn" title="Show AUTOMO your screen (one frame)" aria-label="Capture screen" onClick={grabScreen}>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>
+          </button>
+        )}
         <textarea
           ref={ta}
           rows={1}

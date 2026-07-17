@@ -14,7 +14,7 @@ import type {
 import type { AgentInputItem, SerializedTool } from "@openai/agents";
 import { resolveBrainModel } from "../runtime/model/model";
 import type { VoiceConfig } from "./config";
-import type { Tts, TtsSession } from "./tts";
+import type { TtsEngine, TtsSession } from "./tts";
 import type { Stt } from "./asr";
 import { concatPcm, pcm16ToArrayBuffer } from "./pcm";
 
@@ -40,7 +40,7 @@ export class LocalRealtimeTransport extends EventEmitterDelegate<RealtimeTranspo
   protected eventEmitter = new RuntimeEventEmitter<RealtimeTransportEventTypes>() as any;
   status: "connected" | "disconnected" | "connecting" | "disconnecting" = "disconnected";
 
-  #cfg: VoiceConfig; #tts: Tts; #stt: Stt;
+  #cfg: VoiceConfig; #tts: TtsEngine; #stt: Stt;
   #history: AgentInputItem[] = [];
   #instructions = ""; #tools: SerializedTool[] = [];
   #voice: string; #speed: number;
@@ -50,7 +50,7 @@ export class LocalRealtimeTransport extends EventEmitterDelegate<RealtimeTranspo
   #currentTts: TtsSession | null = null;
   #pending: { count: number; startResponse: boolean } | null = null;
 
-  constructor(deps: { cfg: VoiceConfig; tts: Tts; stt: Stt }) {
+  constructor(deps: { cfg: VoiceConfig; tts: TtsEngine; stt: Stt }) {
     super();
     this.#cfg = deps.cfg; this.#tts = deps.tts; this.#stt = deps.stt;
     this.#voice = deps.cfg.ttsVoice; this.#speed = deps.cfg.ttsSpeed;

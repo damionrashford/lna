@@ -13,6 +13,12 @@ export interface TtsSession {
   cancel(): void;
 }
 
+// The transport speaks through any engine that streams text in and yields a TtsSession. Kokoro (below)
+// is the high-quality path; NativeTts (SpeechSynthesis) is the zero-download fallback.
+export interface TtsEngine {
+  createSession(opts: { voice: string; speed: number }, onPcm: (pcm: Int16Array) => void): TtsSession;
+}
+
 export class Tts {
   #tts: any = null;
   constructor(private modelId: string, private dtype: string, private defaultVoice: string) {}

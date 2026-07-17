@@ -20,3 +20,12 @@ export function mark(name: string): void { try { performance.mark(name); } catch
 export function measure(name: string, startMark: string): number {
   try { return performance.measure(name, startMark).duration; } catch { return 0; }
 }
+
+// Yield the main thread when the user has pending input, so heavy background work (an autonomous run)
+// doesn't stall typing/scrolling. Uses scheduler.yield() where available, else an isInputPending-gated
+// macrotask, else a no-op.
+export async function yieldToInput(): Promise<void> {
+  const s = (globalThis as any).scheduler;
+  if (typeof s?.yield === "function") { try { await s.yield(); return; } catch { /* fall through */ } }
+  if ((navigator as any).scheduling?.isInputPending?.()) await new Promise((r) => setTimeout(r, 0));
+}

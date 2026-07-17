@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApprovals, resolveApproval, resolveElicitation, type PendingItem } from "../lib/hitl/approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -82,12 +82,20 @@ function ElicitationForm({ item }: { item: PendingItem }) {
   );
 }
 
-// Human-in-the-loop surface: tool-approval pauses and elicitation input requests.
+// Human-in-the-loop surface: tool-approval pauses and elicitation input requests. Rendered in a native
+// modal <dialog> so a pending decision traps focus and takes the top layer — the agent is blocked on the
+// human, so the UI reflects that. Esc is swallowed (cancel event): a request must be explicitly resolved.
 export default function Approvals() {
   const pending = useApprovals();
-  if (!pending.length) return null;
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = dialog.current;
+    if (!d) return;
+    if (pending.length && !d.open) d.showModal();
+    else if (!pending.length && d.open) d.close();
+  }, [pending.length]);
   return (
-    <>
+    <dialog ref={dialog} className="approve-dialog" onCancel={(e) => e.preventDefault()}>
       {pending.map((p) =>
         p.kind === "elicitation" ? (
           <ElicitationForm key={p.id} item={p} />
@@ -101,6 +109,6 @@ export default function Approvals() {
           </div>
         ),
       )}
-    </>
+    </dialog>
   );
 }

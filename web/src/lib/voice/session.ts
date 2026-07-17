@@ -12,7 +12,8 @@ import { loadVoiceConfig } from "./config";
 import { LocalRealtimeTransport } from "./transport";
 import { VoiceAudio } from "./audio";
 import { createWorkerStt } from "./worker-stt";
-import { Tts } from "./tts";
+import { Tts, type TtsEngine } from "./tts";
+import { NativeTts, nativeTtsSupported } from "./native-tts";
 import { pcm16ToArrayBuffer } from "./pcm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -33,10 +34,20 @@ export async function startVoice(): Promise<void> {
     installModelProvider(S.model); // ensure the shared model provider is live for the transport
     const cfg = loadVoiceConfig();
     const stt = await createWorkerStt(cfg.asrModelId, "q8");
-    const tts = new Tts(cfg.ttsModelId, cfg.ttsDtype, cfg.ttsVoice);
-    await tts.load();
+    // Kokoro is the high-quality engine; if it isn't installed, degrade to the platform speech engine so
+    // voice still works with zero download rather than failing the whole session.
+    let engine: TtsEngine;
+    try {
+      const kokoro = new Tts(cfg.ttsModelId, cfg.ttsDtype, cfg.ttsVoice);
+      await kokoro.load();
+      engine = kokoro;
+    } catch (e: any) {
+      if (!nativeTtsSupported()) throw e;
+      logEvent("warn", "voice: Kokoro unavailable, using the browser speech engine");
+      engine = new NativeTts(cfg.ttsSpeed);
+    }
 
-    const transport = new LocalRealtimeTransport({ cfg, tts, stt });
+    const transport = new LocalRealtimeTransport({ cfg, tts: engine, stt });
     const agent = new RealtimeAgent({ name: "AUTOMO", instructions: VOICE_INSTRUCTIONS, voice: cfg.ttsVoice, tools: [webSearchTool] });
     session = new RealtimeSession(agent as any, { transport: transport as any });
 

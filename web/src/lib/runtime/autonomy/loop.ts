@@ -15,6 +15,8 @@ import { isLooping, clearLoopGuard } from "./loopguard";
 import { criticGuardrail } from "./critic";
 import { nextCronRun } from "./cron";
 import { setCurrentTaskId } from "./current";
+import { yieldToInput } from "../../platform/perf";
+import { notifyIfHidden } from "../../platform/notify";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let ticking = false;
@@ -35,6 +37,7 @@ export async function tick(at = Date.now()): Promise<"ran" | "idle" | "not-leade
 }
 
 async function runTask(task: Task): Promise<void> {
+  await yieldToInput(); // let the user's typing/scrolling go first before a heavy background run
   await updateTask(task.id, { status: "working" });
   await appendEvent(task.id, "run", task.prompt.slice(0, 160));
   await executeRun(task, task.prompt);
@@ -84,6 +87,7 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
       await saveThread(task.id, result.state.toString());
       await updateTask(task.id, { status: "input_required", note: "awaiting approval" });
       await appendEvent(task.id, "stop", "blocked on approval");
+      notifyIfHidden("AUTOMO — approval needed", task.prompt.slice(0, 100));
       return;
     }
     const out = typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
@@ -113,6 +117,7 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
     await updateTask(task.id, { status: "completed", note: out.slice(0, 200) });
     await appendEvent(task.id, "stop", "done");
     logEvent("info", `autonomous task ${task.id} done`);
+    notifyIfHidden("AUTOMO — task done", task.prompt.slice(0, 100));
   } catch (e: any) {
     // Critic tripwire = the output didn't meet the goal → treat as a retry, not a crash.
     if (e instanceof OutputGuardrailTripwireTriggered) {

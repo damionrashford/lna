@@ -3,6 +3,7 @@
 import { S, trimUrl, set, getState, setStatus, setCap } from "../../store";
 import { providerFor } from "@automo/inference";
 import { localFetch, probeReachable, probeBridge } from "../net/index";
+import { viewTransition } from "../platform/transitions";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -49,7 +50,7 @@ export async function refreshModels(): Promise<string[]> {
 
 function failConnect() { set({ connecting: false, connected: false }); setStatus("err", "not connected"); setCap("model", "err", "blocked"); }
 export function onConnected(models: string[]) {
-  set({ connected: true, connecting: false });
+  viewTransition(() => set({ connected: true, connecting: false }));
   setStatus("ok", "connected"); setCap("model", "ok", `${models.length} model${models.length > 1 ? "s" : ""}`);
   probeBridge();
 }
