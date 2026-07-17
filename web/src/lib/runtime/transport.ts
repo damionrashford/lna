@@ -14,6 +14,7 @@ import { S, getState, setUsage, logEvent } from "../../store";
 import { installModelProvider } from "./model";
 import { buildAgent, ensureSandbox } from "../agent";
 import { buildContext } from "./context";
+import { toolOutputTrimmer } from "./trim";
 import { requestApproval } from "../hitl/approvals";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -44,7 +45,9 @@ export class LocalAgentTransport implements ChatTransport<UIMessage> {
     const input = toAgentInput(messages);
     // context: the app-local RunContext (AutomoContext) for this run — sandbox session, settings
     // snapshot, run env, logger — read by every tool, guardrail, and the dynamic instructions.
-    const opts = { sandbox: { session }, context: buildContext(session, getState().sessionId), stream: true, maxTurns: 24, signal: abortSignal } as any;
+    // callModelInputFilter trims old/oversized tool outputs before each model call — keeps a small local
+    // model's context window from blowing out on long shell/search/file results (highest-ROI context lever).
+    const opts = { sandbox: { session }, context: buildContext(session, getState().sessionId), stream: true, maxTurns: 24, signal: abortSignal, callModelInputFilter: toolOutputTrimmer() } as any;
 
     return createUIMessageStream({
       onError: (e: any) => {
