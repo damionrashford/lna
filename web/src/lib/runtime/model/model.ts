@@ -1,14 +1,15 @@
-// Ollama transport shim for the in-browser @openai/agents runtime.
+// Non-native Responses transport shim for the in-browser @openai/agents runtime.
 //
-// The SDK gates apply_patch / structured-tool / compaction on the NATIVE Responses
-// transport, which it enables when the model class name does NOT contain "ChatCompletions".
-// Ollama's /v1/responses doesn't implement that native transport, so a plain
-// OpenAIResponsesModel would break apply_patch + memory generation. Fix: subclass with a
-// name containing "ChatCompletions" → those features fall back to ordinary FUNCTION tools
-// (which Ollama's Responses endpoint fully supports), while inference still hits /v1/responses.
+// The SDK gates apply_patch / structured-tool / compaction on the NATIVE Responses transport, which it
+// enables when the model class name does NOT contain "ChatCompletions". Providers whose OpenAI-compatible
+// endpoint doesn't implement that native transport (Ollama, HuggingFace's router) would break apply_patch
+// + memory generation under a plain OpenAIResponsesModel. Fix: subclass with a name containing
+// "ChatCompletions" → those features fall back to ordinary FUNCTION tools (which those endpoints support),
+// while inference still hits /v1/responses. vLLM implements the native transport, so it skips the shim
+// (see installModelProvider's `native` branch).
 //
-// The OpenAI client is pointed at the user's local Ollama and fetches over LNA (loopback),
-// so the browser page reaches the model on the machine.
+// The OpenAI client is pointed at the selected local/remote endpoint and fetches over LNA (loopback) for
+// local addresses, so the browser page reaches the model on the machine.
 import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient, type Model, type ModelProvider } from "@openai/agents";
 import { OpenAI } from "openai";
 import { S } from "../../../store";
@@ -22,9 +23,10 @@ import { spaceFor } from "../../net/index";
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}
 Object.defineProperty(ChatCompletionsResponsesModel, "name", { value: "ChatCompletionsResponsesModel" });
 
-// fetch that carries the LNA loopback hint ONLY for local addresses, so requests reach localhost Ollama
-// from a public origin. Remote endpoints (HuggingFace router) must NOT get the hint — Chrome rejects a
-// loopback-hinted request to a public host, so a always-on hint breaks the remote provider.
+// fetch that carries the LNA loopback hint ONLY for local addresses, so requests reach a local model
+// server (Ollama, vLLM) on localhost from a public origin. Remote endpoints (HuggingFace router) must NOT
+// get the hint — Chrome rejects a loopback-hinted request to a public host, so an always-on hint would
+// break the remote provider.
 const lnaFetch = ((input: any, init?: any) => {
   const url = typeof input === "string" ? input : input?.url ?? String(input);
   if (!spaceFor(url)) return fetch(input, init); // public host → plain fetch
