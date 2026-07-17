@@ -53,11 +53,26 @@ scheduler (opportunistic drain)     outer loop = tick(now)                inner 
 | **Subagents (sparingly)** | `runtime/subagent.ts` | fresh in-browser `Runner` with its own context window, restricted tools, a task string, final text harvested; single / parallel(capped) / chain modes — **only for independent read/search**, linear for dependent writes |
 | **HITL via interruption** | existing `transport.ts` + `hitl/approvals.ts` | high-stakes tool → pause+persist → approval surface (in-app or desktop notification) → resume exact turn. This is `autonomy.md` "confirm first" as loop control |
 
+## Context engineering — the make-or-break for a small local model
+
+An autonomous loop is a *machine for generating context rot*: recall degrades as tokens grow (finite attention budget + lost-in-the-middle U-curve), and **plans don't persist** — the plan's influence on the model decays several-fold per step, so evicting or burying it wrecks the run. On a small local window this ceiling is hit almost immediately, so context curation is *the* discipline. Concrete recipe (maps to the SDK primitives AUTOMO already has — all generic in code):
+
+1. **Trim tool output first (highest ROI, lowest complexity).** A `callModelInputFilter` that protects the last ~2 turns and replaces older tool results >500 chars with a ~200-char head preview + a `[trimmed …]` label. Bloated tool results are the #1 cause of small-model context blowout — this alone often keeps you under the window without semantic compaction.
+2. **Token-triggered compaction at ~0.7× of the local window** (weaker models need *earlier, more aggressive* compression), run **off the critical path** (between turns / on idle), with the summarizer routed to a **cheaper local quant**. Extend `compact.ts`'s schema to: goals → what happened → **important details (identifiers verbatim — paths, URLs, error strings)** → errors & fixes → current state → **next step (with a direct quote of where it left off)** → lookup hints. **Never split a tool-call/tool-result pair** (cut on an assistant boundary). Use a **1.3× token safety margin** on bytes/4 (JSON overhead) since we lack the local tokenizer.
+3. **Recite the goal + to-do at the *end* of context every step** (the `plan.ts` render doubles as this) — pushes the goal past the lost-in-the-middle zone. Free, no architecture change.
+4. **Restorable compression** — drop a payload, keep its pointer: the sandbox workspace **is** external memory (Manus-style). Persist `memories/`+`sessions/` to OPFS; rehydrate on resume.
+5. **`memory()` is already the right design** — progressive disclosure (`memory_summary.md` up front, `MEMORY.md` searched on demand), two-phase generation (Phase-1 mini model, Phase-2 best). Keep two lanes separate: conversational `Session` history → IndexedDB/sql.js; distilled lessons → OPFS files.
+6. **KV-cache discipline** — append-only context, byte-stable prefix, deterministic JSON key order; **never a per-second timestamp at the top of the system prompt** (invalidates the whole cache; ~10× cost).
+7. **Keep failures in context** (errors are evidence the model adapts from); **mask tools, don't add/remove them** mid-run (dangling refs + cache breakage); **inject small structured variation** so the model doesn't mimic its own repetitive loop.
+8. **`RunContext` for non-model state** (bridge handles, loggers) — zero tokens, never rots (but no secrets if you serialize `RunState` for resume).
+
 ## Staged slices (buildable, verifiable, one commit each)
 
-1. **Task substrate** (`runtime/tasks.ts`) — IndexedDB stores + CRUD + `dequeueReady(now)` (deps satisfied, `runAfter<=now`). Verify with unit round-trips.
+0. **Task substrate** (`runtime/tasks.ts`) — **DONE** (goals/tasks/events/thread stores + `dequeueReady` + replay-safety flag; tsc+build green).
+
+1. **Tool-output trimmer** (`runtime/trim.ts`) — a `callModelInputFilter` (protect last 2 turns; >500-char tool outputs → 200-char preview). Highest-ROI context win; ships independent of the loop.
 2. **Outer loop** (`runtime/loop.ts`) — `tick(now)`: leader-elect (reuse `locks.ts`), dequeue, run the existing `run()` path, persist `RunState`+events, mark status. Verify: enqueue a task, tick, see it run + resume after a simulated reload.
-3. **Stop stack + loop-guard + repair** — wire the budget/critic/until-dry/no-progress stack, `loop-guard.ts`, `repair.ts`, truncated-message defense. Verify with a deliberately looping/malformed local model.
+3. **Stop stack + loop-guard + repair** — budget/critic/until-dry/no-progress stack, `loop-guard.ts` (result-hash + volatile-ID stripping), `repair.ts` (tool-arg JSON repair), truncated-message defense. Verify with a deliberately looping/malformed local model.
 4. **Compaction upgrade** (`compact.ts`) — full schema + file-op ledger + never-orphan-pairs + `[reference only]`. Verify a long transcript compacts and resumes coherently.
 5. **Plan tool + live todo UI** (`tools/plan.ts` + a Thread panel).
 6. **Scheduler** (`runtime/scheduler.ts`) — durable queue + drain on interval/visibility/SW-sync/periodicsync; phase-stagger; effectively-empty short-circuit. Verify foreground drain; note background is best-effort.
