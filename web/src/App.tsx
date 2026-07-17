@@ -6,6 +6,7 @@ import Thread from "./components/Thread";
 import Composer from "./components/Composer";
 import Settings from "./components/Settings";
 import DebugPanel from "./components/DebugPanel";
+import Onboarding from "./components/Onboarding";
 
 export default function App() {
   const { connected } = useStore();
@@ -16,6 +17,7 @@ export default function App() {
       {connected && <Composer />}
       <Settings />
       <DebugPanel />
+      <Onboarding />
     </ChatProvider>
   );
 }

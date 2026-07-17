@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useStore, S, set } from "../store";
+import { useStore, S, set, setProfileName } from "../store";
+import { getProfile, saveProfile, type Tone } from "../lib/runtime/profile";
 import {
   createSession, switchSession, deleteSession, pullModel,
   addRepo, snapshotWorkspace, restoreSnapshot, deleteSnapshot,
@@ -30,6 +31,9 @@ export default function Settings() {
   const [mcpTransport, setMcpTransport] = useState<"http" | "stdio" | "inpage">("http");
   const [mcpTarget, setMcpTarget] = useState("");
   const [mcpAuth, setMcpAuth] = useState("");
+  const [pname, setPname] = useState(getProfile().name);
+  const [pfocus, setPfocus] = useState(getProfile().focus);
+  const [ptone, setPtone] = useState<Tone>(getProfile().tone);
 
   const close = () => set({ drawerOpen: false });
 
@@ -41,6 +45,17 @@ export default function Settings() {
           <button className="iconbtn" aria-label="Close" onClick={close}><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         </div>
         <div className="body">
+          <div className="field"><label>You</label>
+            <input placeholder="your name" value={pname} onChange={(e) => { setPname(e.target.value); }} onBlur={() => { saveProfile({ name: pname.trim() }); setProfileName(pname.trim()); }} />
+            <input placeholder="what you mostly work on" value={pfocus} onChange={(e) => setPfocus(e.target.value)} onBlur={() => saveProfile({ focus: pfocus.trim() })} style={{ marginTop: 6 }} />
+            <select value={ptone} onChange={(e) => { const t = e.target.value as Tone; setPtone(t); saveProfile({ tone: t }); }} style={{ marginTop: 6 }}>
+              <option value="">Default tone</option>
+              <option value="warm">Warm — friendly and encouraging</option>
+              <option value="concise">Straight up — short, answer first</option>
+              <option value="technical">Technical — precise, assumes expertise</option>
+            </select>
+            <div className="note">Personalizes your greeting and how the assistant talks to you. Stays on this device — no account, nothing sent anywhere.</div></div>
+
           <div className="field"><label>Conversations</label>
             <div>
               {st.sessions.slice(0, 40).map((s) => (
@@ -52,7 +67,7 @@ export default function Settings() {
               {!st.sessions.length && <div className="note" style={{ margin: 0 }}>none</div>}
             </div>
             <button onClick={() => { createSession(); close(); }} style={{ marginTop: 8, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "8px 14px", color: "var(--ink)", fontSize: "0.8rem", cursor: "pointer" }}>+ New conversation</button>
-            <div className="note">Persistent multi-conversation memory (IndexedDB). Each is a Session: history is loaded on open and saved after every turn.</div></div>
+            <div className="note">Every conversation is saved on this device and picks up where you left off — open one to switch back to it.</div></div>
 
           <div className="field"><label>Inference backend</label>
             <select value={provider} onChange={(e) => { setProvider(e.target.value); S.provider = e.target.value; }}>
@@ -71,11 +86,11 @@ export default function Settings() {
               <option value="bridge">Bridge daemon (real Unix on your machine)</option>
               <option value="inbrowser">In-browser (Pyodide + bash + git — zero install)</option>
             </select>
-            <div className="note"><b>Bridge</b> runs real, unsandboxed commands on your machine (full power; needs <code>bun run bridge</code>). <b>In-browser</b> runs a Python + just-bash + isomorphic-git sandbox in this page over OPFS — nothing to install, but it can't touch your real files or run native binaries. Switch takes effect on the next new chat.</div></div>
+            <div className="note"><b>Bridge</b> lets the assistant use the real terminal and files on your computer — full power (start it with <code>bun run bridge</code>). <b>In-browser</b> gives it a safe sandbox that runs right in this page — nothing to install, but it can't reach your real files. Takes effect on your next new chat.</div></div>
 
           <div className="field"><label>Model endpoint (Ollama)</label>
             <input type="text" spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => { S.url = url.trim(); }} />
-            <div className="note">Loopback address on your machine. Reached over LNA — Chrome prompts once, then remembers.</div></div>
+            <div className="note">Where your model runs on this computer. Chrome asks permission once, then remembers.</div></div>
 
           <div className="field"><label>Bridge token</label>
             <input type="text" spellCheck={false} value={bridgeToken} onChange={(e) => setBridgeToken(e.target.value)} onBlur={() => { S.bridgeToken = bridgeToken.trim(); }} />

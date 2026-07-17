@@ -13,7 +13,7 @@ export default function Header() {
       </div>
       <div className="spacer" />
       {usage && usage.total > 0 && (
-        <div className="status" title="Tokens used last turn (input/output)">
+        <div className="status tok" title="Tokens used last turn (input/output)">
           <span>{usage.total.toLocaleString()} tok</span>
         </div>
       )}

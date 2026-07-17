@@ -101,6 +101,12 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
   border:1px solid oklch(68% 0.17 25 / 0.4);border-radius:var(--r-sm);padding:12px 14px;color:var(--ink)}
 .gate .diag b{color:var(--err)}
 .gate .diag ul{margin:8px 0 0 16px;color:var(--ink-mid);line-height:1.6}
+/* machine recommendation — positive info, NOT an error (neutral surface + coral accent) */
+.gate .machine{margin-top:16px;text-align:left;font-size:0.82rem;line-height:1.6;color:var(--ink-mid);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px}
+.gate .machine b{color:var(--ink)}
+.gate .machine b.tier{color:var(--coral);text-transform:capitalize}
+.gate .machine .sug{display:block;margin-top:4px;color:var(--muted)}
 
 /* composer */
 .composer{flex-shrink:0;padding:14px 22px 22px;max-width:820px;margin:0 auto;width:100%}
@@ -135,10 +141,10 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .thumb{position:relative;width:54px;height:54px;border-radius:10px;overflow:hidden;border:1px solid var(--border-hi)}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .thumb .x{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:oklch(14% 0.01 275 / 0.82);color:var(--ink);border:none;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
-.toolchip{align-self:flex-start;max-width:80%;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-pill);padding:6px 14px}
-.toolchip .tk{color:var(--coral);font-weight:600}
-.toolchip .ta{color:var(--ink-mid)}
-.toolchip .tr{color:var(--muted);margin-left:2px}
+.toolchip{align-self:flex-start;max-width:100%;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.72rem;color:var(--ink-mid);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-pill);padding:6px 14px;overflow:hidden}
+.toolchip .tk{color:var(--coral);font-weight:600;flex-shrink:0}
+.toolchip .ta{color:var(--ink-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.toolchip .tr{color:var(--muted);margin-left:2px;flex-shrink:0;white-space:nowrap}
 .mcprow{display:flex;align-items:center;gap:8px;font-size:0.8rem;padding:7px 0;border-bottom:1px solid var(--border)}
 .mcprow .ml{color:var(--ink);font-weight:600}
 .mcprow .mt{font-family:var(--mono);font-size:0.68rem;color:var(--muted);background:var(--surface-2);border-radius:var(--r-pill);padding:1px 8px}
@@ -174,6 +180,7 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .field label{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
 .field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
   padding:10px 12px;color:var(--ink);font-family:var(--mono);font-size:0.82rem}
+.field select{padding-right:30px;text-overflow:ellipsis}  /* room for the native arrow, truncate long options */
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--focus);outline:none}
 .field .note{font-size:0.74rem;color:var(--muted);line-height:1.5}
 .caps{display:flex;flex-direction:column;gap:9px}
@@ -189,4 +196,66 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .ghost:hover{color:var(--ink);border-color:var(--border-hi)}
 .privacy{font-size:0.74rem;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);padding-top:16px}
 .privacy b{color:var(--ink-mid)}
-@media(max-width:640px){ .msg{max-width:88%} .brand .sub{display:none} }
+/* onboarding — warm, non-blocking first-run welcome */
+.gate-hi{font-size:0.82rem;letter-spacing:0.02em;color:var(--coral);margin-bottom:8px;font-weight:600}
+.ob-scrim{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;
+  background:oklch(10% 0.01 275 / 0.66);backdrop-filter:blur(4px);animation:obfade .25s ease}
+@keyframes obfade{from{opacity:0}}
+.ob{width:min(440px,100%);background:var(--surface);border:1px solid var(--border-hi);border-radius:var(--r);
+  padding:30px 28px 22px;text-align:center;box-shadow:0 24px 70px oklch(8% 0.01 275 / 0.6);
+  animation:obrise .3s cubic-bezier(.2,.7,.2,1)}
+@keyframes obrise{from{opacity:0;transform:translateY(12px)}}
+.ob-badge{width:52px;height:52px;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center;
+  background:radial-gradient(circle at 35% 30%, var(--coral-hi), var(--coral));box-shadow:0 6px 22px oklch(76% 0.14 32 / 0.35)}
+.ob-badge svg{width:24px;height:24px;fill:var(--coral-ink)}
+.ob h2{font-size:1.3rem;font-weight:700;letter-spacing:-0.01em;line-height:1.25}
+.ob p{color:var(--ink-mid);font-size:0.88rem;line-height:1.6;margin:9px 0 20px}
+.ob-field{display:block;text-align:left}
+.ob-field span{display:block;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.ob-field input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:12px 14px;color:var(--ink);font-family:inherit;font-size:0.95rem;outline:none;transition:border-color .15s,box-shadow .15s}
+.ob-field input:focus{border-color:var(--focus);box-shadow:0 0 0 3px oklch(65% 0.09 220 / 0.18)}
+.ob-chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+.ob-chip{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-pill);padding:9px 16px;
+  color:var(--ink-mid);font-size:0.86rem;transition:.15s}
+.ob-chip:hover{border-color:var(--border-hi);color:var(--ink)}
+.ob-chip.on{background:var(--coral);border-color:var(--coral);color:var(--coral-ink);font-weight:600}
+.ob-tones{display:flex;flex-direction:column;gap:9px}
+.ob-tone{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 15px;transition:.15s}
+.ob-tone:hover{border-color:var(--border-hi)}
+.ob-tone.on{border-color:var(--coral);background:oklch(76% 0.14 32 / 0.08)}
+.ob-tone b{font-size:0.9rem;color:var(--ink)} .ob-tone.on b{color:var(--coral)}
+.ob-tone span{font-size:0.78rem;color:var(--muted)}
+.ob-dots{display:flex;gap:6px;justify-content:center;margin:22px 0 16px}
+.ob-dots span{width:6px;height:6px;border-radius:50%;background:var(--border-hi);transition:.2s}
+.ob-dots span.on{background:var(--coral);width:18px;border-radius:3px}
+.ob-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ob-skip{background:none;border:none;color:var(--muted);font-size:0.82rem;padding:8px 6px}
+.ob-skip:hover{color:var(--ink-mid)}
+.ob-nav{display:flex;gap:8px}
+.ob-back{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 16px;color:var(--ink-mid);font-size:0.84rem}
+.ob-back:hover{color:var(--ink);border-color:var(--border-hi)}
+.ob-next{background:var(--coral);border:none;border-radius:var(--r-sm);padding:9px 20px;color:var(--coral-ink);font-weight:600;font-size:0.86rem;transition:background .15s,transform .1s}
+.ob-next:hover{background:var(--coral-hi)} .ob-next:active{transform:translateY(1px)}
+
+@media(max-width:640px){
+  .msg{max-width:88%}
+  .ob{padding:26px 20px 18px} .ob h2{font-size:1.18rem}
+  .brand .sub{display:none}
+  header{padding:12px 14px;gap:8px}
+  .brand{gap:9px;min-width:0}
+  .brand h1{font-size:0.95rem;letter-spacing:0.18em}
+  .badge{width:34px;height:34px} .badge svg{width:15px;height:15px}
+  .iconbtn{width:36px;height:36px} .iconbtn svg{width:16px;height:16px}
+  .status{padding:6px 11px;font-size:0.68rem;white-space:nowrap}
+  .status.tok{display:none}                 /* token pill is a nice-to-have — drop it on phones */
+  .thread{padding:12px 14px 8px}
+  .composer{padding:12px 14px 18px}
+  .gate{padding:0 16px}
+}
+/* very small phones: collapse the connection pill to just its dot so header controls never clip */
+@media(max-width:430px){
+  .status:not(.tok){padding:9px}
+  .status:not(.tok) span:last-child{display:none}
+}

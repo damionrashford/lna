@@ -6,6 +6,7 @@ import type { AutomoContext } from "../runtime/context";
 import { activeMcpServers } from "../mcp/index";
 import { webSearchTool, readUrlTool } from "../tools/search";
 import { agentInputGuardrails, agentOutputGuardrails } from "../runtime/guardrails";
+import { personalize } from "../runtime/profile";
 
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser, connected to their own machine over Local Network Access. You operate a real Unix sandbox on their machine:
 - shell (exec_command): run commands in the workspace.
@@ -18,7 +19,7 @@ Prefer tools over guessing. Search the web for anything time-sensitive or that y
 // Dynamic instructions — evaluated per run from the run's AutomoContext (see buildAgent). This is the
 // Agent/LLM-context seam: whatever the model should know about the run environment goes here.
 export function buildInstructions(ctx: AutomoContext): string {
-  const base = ctx.settings.systemPrompt || DEFAULT_INSTRUCTIONS;
+  const base = personalize(ctx.settings.systemPrompt || DEFAULT_INSTRUCTIONS);
   const folder = ctx.env.folder ?? "none";
   const mcp = ctx.env.mcpServers;
   return `${base}\n\n[Run context — model: ${ctx.settings.model || "unknown"} · granted folder: ${folder} · MCP servers: ${mcp.length ? mcp.join(", ") : "none"} · date: ${ctx.env.startedAt}]`;

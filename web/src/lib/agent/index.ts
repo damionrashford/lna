@@ -155,6 +155,10 @@ export async function boot() {
   const { initTabs } = await import("../platform/tabs");
   const { initPwa } = await import("../platform/pwa");
   setStatus("", "not connected");
+  // local profile → show the warm first-run welcome once (non-blocking), mirror the name for the greeting
+  const { getProfile } = await import("../runtime/profile");
+  const prof = getProfile();
+  set({ onboarding: !prof.onboarded, profileName: prof.name });
   initWakeLock();
   initTabs();
   initPwa(); // Share Target / File Handlers / install prompt for the installed PWA

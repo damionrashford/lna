@@ -43,6 +43,8 @@ export interface State {
   voice: VoiceState;
   intake: string | null;   // text shared/opened into the installed PWA, to prefill the composer
   canInstall: boolean;     // a beforeinstallprompt was captured (show an Install affordance)
+  onboarding: boolean;     // show the first-run welcome (non-blocking)
+  profileName: string;     // reactive mirror of the local profile name, for the greeting
 }
 
 let state: State = {
@@ -76,6 +78,8 @@ let state: State = {
   voice: { active: false, state: "idle" },
   intake: null,
   canInstall: false,
+  onboarding: false,
+  profileName: "",
 };
 
 const listeners = new Set<() => void>();
@@ -115,6 +119,8 @@ export function setMachine(m: MachineInfo | null) { set({ machine: m }); }
 export function setVoice(v: VoiceState) { set({ voice: v }); }
 export function setIntake(text: string | null) { set({ intake: text }); }
 export function setCanInstall(v: boolean) { set({ canInstall: v }); }
+export function setOnboarding(v: boolean) { set({ onboarding: v }); }
+export function setProfileName(v: string) { set({ profileName: v }); }
 
 // upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
 export function updateTask(server: string, tool: string, status: string) {
