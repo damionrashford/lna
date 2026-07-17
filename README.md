@@ -146,6 +146,7 @@ The queue speaks the **MCP Tasks protocol** — its status vocabulary matches th
 
 <br/>
 
+- **Skills** — reusable instruction bundles the agent loads on demand, hosted right in this repo under [`.agents/skills/`](.agents/skills/) and pulled via the SDK's `skills` capability (`gitRepo`). The index is generated from each `SKILL.md` at build time, so adding a skill folder is all it takes — no hand-maintained list.
 - **MCP** — the real `@modelcontextprotocol/sdk` client over **three transports**: Streamable HTTP, bridge-proxied stdio, and a **pure in-page stdio** transport (a bundled Node MCP server runs in the page over `node:*` browser shims — no bridge). Elicitation, roots, and tasks all supported; server-prefixed tool names.
 - **Voice** — a `RealtimeSession` (`@openai/agents-realtime`) over a custom in-browser transport: Whisper (STT) → the same provider-aware model → Kokoro (TTS), with an AudioWorklet mic + energy VAD + barge-in, transcripts bridged into the chat.
 - **Human-in-the-loop** — tools with `needsApproval` pause the run; the transport wraps pause → approve → resume in one streamed chat turn. MCP elicitation shares the surface.

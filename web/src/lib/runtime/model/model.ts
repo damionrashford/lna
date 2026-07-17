@@ -16,8 +16,11 @@ import { providerFor } from "@automo/inference";
 import { BrowserModel } from "./browser-model";
 import { spaceFor } from "../../net/index";
 
-// Name MUST contain "ChatCompletions" to trip the SDK's transport check.
+// Name MUST contain "ChatCompletions" to trip the SDK's transport check. The production minifier renames
+// classes, so `constructor.name` loses the substring — pin it via a string literal (which minification
+// keeps) so both the SDK's gate and our probe below still see it in the bundled build.
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}
+Object.defineProperty(ChatCompletionsResponsesModel, "name", { value: "ChatCompletionsResponsesModel" });
 
 // fetch that carries the LNA loopback hint ONLY for local addresses, so requests reach localhost Ollama
 // from a public origin. Remote endpoints (HuggingFace router) must NOT get the hint — Chrome rejects a
