@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.log
 dist-smoke/
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

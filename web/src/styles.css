@@ -87,8 +87,9 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
   display:grid;place-items:center;font-size:0.72rem;color:var(--coral);font-family:var(--mono);margin-top:1px}
 .step .b{font-size:0.86rem;color:var(--ink)}
 .step .b .d{color:var(--muted);font-size:0.8rem;margin-top:3px;line-height:1.5}
-.step pre{margin-top:7px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;
-  overflow-x:auto;font-family:var(--mono);font-size:0.76rem;color:var(--ink-mid);position:relative}
+.step pre{margin-top:7px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 58px 9px 11px;
+  font-family:var(--mono);font-size:0.76rem;color:var(--ink-mid);position:relative;
+  white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .step pre .copy{position:absolute;top:6px;right:6px;font-size:0.62rem;color:var(--muted);background:var(--surface-2);
   border:1px solid var(--border);border-radius:5px;padding:2px 7px;letter-spacing:.04em;cursor:pointer}
 .step pre .copy:hover{color:var(--ink)}

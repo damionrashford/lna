@@ -7,7 +7,16 @@
     "gen:skills": "bun run ./gen-skills-index.ts",
     "predev": "bun run ./gen-skills-index.ts",
     "dev": "bun ./index.html",
-    "build": "bun run ./build.ts"
+    "build": "bun run ./build.ts",
+    "test": "bun test tests/unit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
+    "test:all": "bun run test && bun run test:e2e",
+    "codegen": "playwright codegen http://localhost:4173",
+    "smoke:build": "bun run ./tests/smoke/build-smoke.ts",
+    "preview": "bun run ./tests/preview.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.32",
@@ -34,6 +43,7 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.1",
+    "@playwright/test": "^1.61.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "babel-plugin-react-compiler": "^1.0.0",

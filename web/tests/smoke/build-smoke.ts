@@ -3,7 +3,9 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const shimsDir = join(dirname(fileURLToPath(import.meta.url)), "src/lib/mcp/shims");
+const here = dirname(fileURLToPath(import.meta.url)); // web/tests/smoke
+const webRoot = join(here, "..", "..");               // web/
+const shimsDir = join(webRoot, "src/lib/mcp/shims");
 const NODE_SHIMS: Record<string, string> = {
   "node:process": "process.ts", "node:fs": "fs.ts", "node:fs/promises": "fs-promises.ts",
   "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "node-zlib.ts",
@@ -23,7 +25,7 @@ const OPTIONAL = ["@huggingface/transformers", "kokoro-js", "@mlc-ai/web-llm", "
 const external = OPTIONAL.filter((p) => { try { (Bun as any).resolveSync(p, import.meta.dir); return false; } catch { return true; } });
 
 const r = await Bun.build({
-  entrypoints: ["./smoke.html"], outdir: "./dist-smoke", minify: false, sourcemap: "none",
+  entrypoints: [join(here, "smoke.html")], outdir: join(webRoot, "dist-smoke"), minify: false, sourcemap: "none",
   publicPath: "/", external, plugins: [nodeShimPlugin],
 });
 if (!r.success) { for (const l of r.logs) console.error(l); process.exit(1); }

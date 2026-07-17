@@ -24,7 +24,7 @@ function render() {
 (async () => {
   // 1. sql.js — SQLite/WASM kv round-trip (CDN wasm)
   await test("sql.js kv round-trip", async () => {
-    const sql = await import("./src/lib/storage/sql");
+    const sql = await import("../../src/lib/storage/sql");
     await sql.kvSet("smoke", { n: 42, s: "hi" });
     const v = await sql.kvGet<{ n: number; s: string }>("smoke");
     if (!v || v.n !== 42 || v.s !== "hi") throw new Error("round-trip mismatch: " + JSON.stringify(v));
@@ -36,7 +36,7 @@ function render() {
   // 2. in-page MCP — programmatic client over the shimmed stdio transport
   await test("in-page MCP round-trip", async () => {
     const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-    const { InPageStdioTransport } = await import("./src/lib/mcp/inpage");
+    const { InPageStdioTransport } = await import("../../src/lib/mcp/inpage");
     const client = new Client({ name: "smoke", version: "1" }, { capabilities: {} });
     await client.connect(new InPageStdioTransport("browser") as any);
     const tools = (await client.listTools()).tools.map((t: any) => t.name);
@@ -50,7 +50,7 @@ function render() {
 
   // 3. in-browser sandbox — Pyodide + just-bash exec + V4A editor + python (CDN Pyodide ~10MB)
   await test("in-browser sandbox (Pyodide + just-bash + editor)", async () => {
-    const { InBrowserSandboxClient } = await import("./src/lib/sandbox/inbrowser/index");
+    const { InBrowserSandboxClient } = await import("../../src/lib/sandbox/inbrowser/index");
     const s: any = await new InBrowserSandboxClient().create({ entries: {} });
     const echo = await s.exec({ cmd: "echo hello-automo" });
     if (!String(echo.stdout).includes("hello-automo")) throw new Error("bash echo: " + JSON.stringify(echo));
