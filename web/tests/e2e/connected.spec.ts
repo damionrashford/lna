@@ -12,9 +12,13 @@ async function connect(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  // deterministically skip the first-run overlay (marking the profile onboarded) so it can never race the
-  // connect button — set before any app script runs
-  await page.addInitScript(() => localStorage.setItem("automo.profile", JSON.stringify({ onboarded: true })));
+  await page.addInitScript(() => {
+    // skip the first-run overlay so it can't race the connect button
+    localStorage.setItem("automo.profile", JSON.stringify({ onboarded: true }));
+    // point the model URL at the test's OWN origin so /api/tags is same-origin — avoids the cross-address
+    // Local-Network-Access preflight that a headless CI browser blocks (and that page.route can't fulfill)
+    localStorage.setItem("automo.url", location.origin);
+  });
   await page.goto("/");
 });
 
