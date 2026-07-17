@@ -76,35 +76,37 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .msg.bot .bubble .cursor{display:inline-block;width:7px;height:15px;background:var(--coral);vertical-align:text-bottom;animation:pulse .8s infinite;margin-left:1px;border-radius:1px}
 
 /* connect gate */
-.gate{max-width:560px;margin:6vh auto;padding:0 22px;text-align:center}
-.gate .badge{width:56px;height:56px;margin:0 auto 20px}
-.gate .badge svg{width:26px;height:26px}
-.gate h2{font-size:1.5rem;font-weight:700;letter-spacing:-0.01em}
-.gate p{color:var(--ink-mid);margin-top:10px;line-height:1.6;font-size:0.95rem}
-.gate .steps{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;margin:24px 0;display:flex;flex-direction:column;gap:14px}
-.step{display:grid;grid-template-columns:auto 1fr;gap:13px;align-items:start}
+/* gate mode: center the connect card in the viewport (margin:auto stays scrollable if ever too tall) */
+main.gate-mode{display:flex;flex-direction:column}
+.gate{max-width:560px;margin:auto;padding:14px 22px;text-align:center}
+.gate .badge{width:48px;height:48px;margin:0 auto 12px}
+.gate .badge svg{width:24px;height:24px}
+.gate h2{font-size:1.4rem;font-weight:700;letter-spacing:-0.01em}
+.gate p{color:var(--ink-mid);margin-top:6px;line-height:1.45;font-size:0.9rem}
+.gate .steps{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin:12px 0;display:flex;flex-direction:column;gap:9px}
+.step{display:grid;grid-template-columns:auto 1fr;gap:11px;align-items:start}
 .step .n{width:22px;height:22px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-hi);
   display:grid;place-items:center;font-size:0.72rem;color:var(--coral);font-family:var(--mono);margin-top:1px}
 .step .b{font-size:0.86rem;color:var(--ink)}
 .step .b .d{color:var(--muted);font-size:0.8rem;margin-top:3px;line-height:1.5}
-.step pre{margin-top:7px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 58px 9px 11px;
+.step pre{margin-top:5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 58px 8px 11px;
   font-family:var(--mono);font-size:0.76rem;color:var(--ink-mid);position:relative;
   white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .step pre .copy{position:absolute;top:6px;right:6px;font-size:0.62rem;color:var(--muted);background:var(--surface-2);
   border:1px solid var(--border);border-radius:5px;padding:2px 7px;letter-spacing:.04em;cursor:pointer}
 .step pre .copy:hover{color:var(--ink)}
 .cta{display:inline-flex;align-items:center;gap:9px;background:var(--coral);color:var(--coral-ink);font-weight:600;
-  border:none;border-radius:var(--r-pill);padding:13px 26px;font-size:0.95rem;transition:background .15s,transform .1s;
+  border:none;border-radius:var(--r-pill);padding:12px 24px;font-size:0.95rem;transition:background .15s,transform .1s;
   box-shadow:0 6px 22px oklch(76% 0.14 32 / 0.3)}
 .cta:hover{background:var(--coral-hi)} .cta:active{transform:translateY(1px)} .cta:disabled{opacity:.5;cursor:wait}
-.gate .foot{margin-top:18px;font-size:0.78rem;color:var(--muted)}
+.gate .foot{margin-top:12px;font-size:0.78rem;color:var(--muted)}
 .gate .diag{margin-top:16px;font-size:0.82rem;text-align:left;background:oklch(68% 0.17 25 / 0.08);
   border:1px solid oklch(68% 0.17 25 / 0.4);border-radius:var(--r-sm);padding:12px 14px;color:var(--ink)}
 .gate .diag b{color:var(--err)}
 .gate .diag ul{margin:8px 0 0 16px;color:var(--ink-mid);line-height:1.6}
 /* machine recommendation — positive info, NOT an error (neutral surface + coral accent) */
-.gate .machine{margin-top:16px;text-align:left;font-size:0.82rem;line-height:1.6;color:var(--ink-mid);
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px}
+.gate .machine{margin-top:10px;text-align:left;font-size:0.8rem;line-height:1.45;color:var(--ink-mid);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 12px}
 .gate .machine b{color:var(--ink)}
 .gate .machine b.tier{color:var(--coral);text-transform:capitalize}
 .gate .machine .sug{display:block;margin-top:4px;color:var(--muted)}

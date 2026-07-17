@@ -13,7 +13,7 @@ export default function App() {
   return (
     <ChatProvider>
       <Header />
-      <main>{connected ? <Thread /> : <ConnectGate />}</main>
+      <main className={connected ? undefined : "gate-mode"}>{connected ? <Thread /> : <ConnectGate />}</main>
       {connected && <Composer />}
       <Settings />
       <DebugPanel />

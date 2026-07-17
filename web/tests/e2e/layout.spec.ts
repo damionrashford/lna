@@ -19,3 +19,16 @@ test("gate heading and CTA render", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Connect to your machine" })).toBeVisible();
   await expect(page.getByRole("button", { name: /connect to your machine/i })).toBeVisible();
 });
+
+test("gate fits the viewport with no vertical scroll (desktop)", async ({ page }, testInfo) => {
+  // on desktop the connect card — including the hardware recommendation block — must fit without scrolling.
+  // Narrow phones wrap the copy to many more lines, where scrolling a connect screen is normal UX.
+  test.skip(testInfo.project.name === "mobile-chrome", "narrow mobile viewports scroll — expected");
+  await expect(page.getByRole("heading", { name: "Connect to your machine" })).toBeVisible();
+  // the hardware block renders async and adds height — wait for it (best-effort) so we measure the worst case
+  await page.locator(".gate .machine").waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await expect
+    .poll(() => page.evaluate(() => { const m = document.querySelector("main"); return m ? m.scrollHeight - m.clientHeight : 0; }),
+      { message: "the connect gate overflows the viewport (scrolls vertically)" })
+    .toBeLessThanOrEqual(1);
+});
