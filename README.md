@@ -1,14 +1,68 @@
-# AUTOMO — a local-first browser AI agent
+<div align="center">
 
-**Live:** https://damionrashford.github.io/lna/
+<img src="web/public/icon-192.png" width="84" alt="AUTOMO" />
 
-AUTOMO is a static web page that *is* an AI agent. It runs in your browser but thinks on **your** machine: a public HTTPS page, with one user-granted **[Local Network Access](https://wicg.github.io/local-network-access/)** (LNA) permission, reaches `localhost` to drive your own model, files, shell, and MCP tools. Hosted UI, local everything else — nothing leaves your machine.
+# AUTOMO
 
-It's a real **[`@openai/agents`](https://openai.github.io/openai-agents-js/) SandboxAgent**, running in the browser — not a reimplementation. Inference goes to a local model — Ollama, vLLM, HuggingFace, or a fully **in-browser WebGPU engine** (transformers.js or MLC web-llm) — over LNA, chosen by a hardware-aware provider layer. The sandbox (shell, filesystem/`apply_patch`, skills, memory, compaction) is the SDK's, and runs **either** on your machine via a small daemon **or** entirely in the page (Pyodide + just-bash + isomorphic-git) — a **bridge-optional** design. There's a **local voice mode** (in-browser Whisper→model→Kokoro over a RealtimeSession), and AUTOMO is an **installable, offline PWA**. The chat surface is the **[Vercel AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui)** (`useChat`), driven serverlessly by a transport that runs the agent locally.
+**A local-first AI agent that lives in your browser and thinks on _your_ machine.**
 
-> The repo is named `lna` for historical reasons — it started as a Local Network Access reference.
+A static web page that _is_ an agent: hosted UI, local everything else — your model, your files, your shell. Nothing leaves your machine.
 
-## How it fits together
+[**▶ Live demo**](https://damionrashford.github.io/lna/) · [Architecture](#-how-it-fits-together) · [Quickstart](#-quickstart) · [Develop](#-develop)
+
+[![Deploy](https://github.com/damionrashford/lna/actions/workflows/pages.yml/badge.svg)](https://github.com/damionrashford/lna/actions/workflows/pages.yml)
+[![Tests](https://github.com/damionrashford/lna/actions/workflows/e2e.yml/badge.svg)](https://github.com/damionrashford/lna/actions/workflows/e2e.yml)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-runtime-000?logo=bun&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
+![OpenAI Agents SDK](https://img.shields.io/badge/%40openai%2Fagents-SandboxAgent-412991?logo=openai&logoColor=white)
+
+<br/>
+
+<img src="docs/screenshot.png" width="820" alt="AUTOMO — connect to your machine" />
+
+</div>
+
+---
+
+## What is this?
+
+AUTOMO is a real **[`@openai/agents`](https://openai.github.io/openai-agents-js/) `SandboxAgent`** running _in the browser_ — not a reimplementation. A public HTTPS page, with one user-granted **[Local Network Access](https://wicg.github.io/local-network-access/)** (LNA) permission, reaches `localhost` to drive your own model, files, shell, and MCP tools.
+
+> [!NOTE]
+> **The one idea:** a public page can, with one permission, open a connection to `localhost`. AUTOMO uses that to talk to a local model _and_ drive a real Unix sandbox on your machine. **Hosted UI, local compute.**
+
+Everything below the UI is yours and optional:
+
+- **Model** — Ollama, vLLM, HuggingFace, **or a fully in-browser WebGPU engine** (transformers.js / MLC web-llm). Picked by a hardware-aware provider layer.
+- **Sandbox** — shell + filesystem + `apply_patch`, running **either** on your machine via a tiny daemon **or** entirely in the page (Pyodide + just-bash + isomorphic-git). Bridge-optional.
+- **Autonomy** — an opt-in loop that runs queued and scheduled tasks on their own, with a critic gate, loop detection, and cron recurrence.
+- **Voice, MCP, PWA** — local voice mode (Whisper → model → Kokoro), MCP over three transports, and an installable offline app.
+
+<sub>The repo is named `lna` for historical reasons — it began as a Local Network Access reference.</sub>
+
+---
+
+## 🚀 Quickstart
+
+You need a Chromium browser (Chrome ≥142, or the flag on 138–141) and a local model. Three steps, on the machine you want AUTOMO to think on:
+
+```bash
+# 1 — let your model accept the page, and start it
+OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve
+
+# 2 — pull a model once (AUTOMO can also trigger this from the browser)
+ollama pull llama3.2
+```
+
+3. Open the [**live demo**](https://damionrashford.github.io/lna/), click **Connect**, and grant Chrome's local-network prompt.
+
+> [!TIP]
+> No install at all? Switch **Settings → Sandbox** to _in-browser_ and pick a **WebGPU** model — you get shell, files, git, and inference entirely in the page, no Ollama, no daemon.
+
+---
+
+## 🧭 How it fits together
 
 ```
 Browser (GitHub Pages, static)                    Your machine
@@ -16,74 +70,150 @@ Browser (GitHub Pages, static)                    Your machine
 │ AUTOMO — React + Tailwind + RC  │                │ Ollama  /v1/responses         │
 │  useChat (AI SDK UI)            │                │  (model, streaming)           │
 │   └ LocalAgentTransport         │──── LNA ──────▶│                               │
-│      run(SandboxAgent,{stream}) │                │                              │
-│      → createAiSdkUiMessageStream│                │ bridge (servers/bridge.ts)    │
-│  BrowserSandboxClient ──────────┼──── LNA (WS) ─▶│  hosts UnixLocalSandboxClient │
+│      run(SandboxAgent,{stream}) │                │ bridge (servers/bridge.ts)    │
+│  BrowserSandboxClient ──────────┼──── LNA (WS) ─▶│  hosts UnixLocalSandboxClient  │
 │   proxies every session call    │                │  → real shell, apply_patch,   │
 └────────────────────────────────┘                │    materialize, snapshots     │
                                                    └──────────────────────────────┘
 ```
 
-- **Chat UI** — Vercel AI SDK UI `useChat` with a custom **`LocalAgentTransport`** (no server): `sendMessages` runs the in-browser SandboxAgent and translates its streamed run into a UIMessage stream via `@openai/agents-extensions/ai-sdk-ui`'s `createAiSdkUiMessageStream`. Messages render `parts` (text, reasoning, tool calls, images). Sessions persist as AI SDK `UIMessage`s in IndexedDB.
-- **Model** — a provider-agnostic inference layer (`@automo/inference`): **Ollama, vLLM, HuggingFace, or a fully in-browser WebGPU engine** — `transformers.js` (ONNX) or **MLC web-llm**, both driving the agent through a custom SDK `Model` (`BrowserModel`). Hardware detection (WebGPU adapter incl. `maxStorageBufferBindingSize` + a VRAM budget, `deviceMemory` / UA-CH / `oscpu` fallback / WebGL renderer / WASM SIMD+threads / mobile / storage / battery / network), scheduled at idle and **refined to exact RAM/VRAM/chip by a bridge `/hw` probe**, recommends a model size on Connect. Provider-aware model class — **vLLM's native Responses transport unlocks native `apply_patch` + server compaction**; Ollama / HuggingFace use a `ChatCompletions`-named shim (function-tool fallback).
-- **Sandbox — two interchangeable backends** behind the SDK's `SandboxClient`/`SandboxSession`/`Editor`: **(1) bridge** — `BrowserSandboxClient` proxies every session call over a WebSocket to the SDK's `UnixLocalSandboxClient` (real processes, diffs, snapshots on your machine); **(2) in-browser** — `InBrowserSandboxClient` runs it all in the page: `exec` via just-bash, filesystem CRUD via the Emscripten FS + the SDK's own `applyDiff` (V4A), `materializeEntry(gitRepo)` via isomorphic-git, persist/hydrate via OPFS. Selectable in Settings; the agent runs unchanged. In-browser is zero-install and sandboxed (can't touch real host files or run native binaries).
-- **Voice** — a local voice mode: a `RealtimeSession` (`@openai/agents-realtime`) over a **custom in-browser transport** that runs Whisper (STT) → the *same* provider-aware model → Kokoro (TTS), all ONNX/WebGPU, with an AudioWorklet mic + energy VAD, barge-in, and transcripts bridged into the chat thread.
-- **Capabilities & tools** — the SDK's `shell`, `filesystem` (apply_patch V4A), `skills` (lazy from a GitHub repo), `memory`, `compaction`; a `web_search` tool (DuckDuckGo via CORS proxy / sandbox `curl`) with **in-browser semantic rerank + dedup**, a `read_url` tool that keeps only the passages relevant to a focus (both via in-browser embeddings); and **MCP via the real `@modelcontextprotocol/sdk` client** with **three transports** — Streamable HTTP, bridge-proxied stdio, and a **pure in-page stdio** transport (a bundled Node MCP server runs in the page over a full set of `node:*` browser shims, no bridge). Elicitation (schema forms), roots (sandbox workspace), and tasks (`callToolStream`) all supported; server-prefixed tool names.
-- **Human-in-the-loop** — tools with `needsApproval` pause the run; the transport wraps the whole pause→approve→resume loop in one UIMessage stream (`createUIMessageStream` + `writer.merge`), so a single chat turn keeps streaming across the approval. MCP elicitation shares the same surface. Gated by the *"Require approval"* setting.
-- **Guardrails** — SDK agent input/output guardrails + tool input/output guardrails, focused on credential safety (block pasted/leaked secrets, refuse to send secrets to web search, redact secrets from tool output). Read from the run context. Gated by the *"Credential guardrails"* setting.
-- **Context** — one typed `AutomoContext` (live sandbox session, settings snapshot, run env, logger) threaded through every tool, guardrail, and the dynamic instructions (the agent's `instructions` is a function of context).
-- **Persistence** — the real sandbox workspace is gzip-cached per session in OPFS (survives reloads via `persistWorkspace`/`hydrateWorkspace`) and optionally **mirrored to a granted folder** on real disk (File System Access + `FileSystemObserver`); client-side **compaction** summarizes long chats when the shim disables the server-side one.
-- **Multi-tab & platform** — Web Locks (one tab owns the sandbox), BroadcastChannel (session-list sync), Screen Wake Lock (held during runs), Badging (pending-approval count on the installed PWA).
-- **Observability** — per-turn token usage (from `RunContext.usage`) and a debug log panel.
-- **Multimodal** — attach an image → vision turn (`input_image`, vision model); `✦` image-generation mode → `/v1/images/generations`.
-- **Storage** — sessions as AI SDK `UIMessage`s in IndexedDB; an optional **sql.js (SQLite/WASM)** store for structured data (kv + query, IDB-persisted).
-- **PWA** — an **installable, offline** app: the service worker precaches the shell (same-origin GET only, so LNA/model/bridge/proxy traffic is never intercepted) and, via **Background Fetch**, pre-downloads multi-MB model weights surviving navigation/close and serves them to the in-browser ML libs. The manifest ships `share_target`, `file_handlers`, `protocol_handlers` (`web+automo://`), `launch_handler`, and shortcuts — share or open a file *with* AUTOMO and it lands in the composer.
+The chat surface is the **[Vercel AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui)** (`useChat`), driven serverlessly by a `LocalAgentTransport` that runs the agent locally and translates its streamed run into a UIMessage stream. The sandbox is the SDK's own, behind two interchangeable backends.
 
-## The bridge (`servers/bridge.ts`)
+---
 
-The only local process. One WebSocket on `127.0.0.1:7967` carries two channels: the **sandbox RPC** (hosts `UnixLocalSandboxClient`) and a **stdio pipe** (for stdio MCP servers).
+## ✨ Capabilities
+
+Everything here is real and wired into the agent. Expand a section for detail.
+
+| Area | What you get |
+| --- | --- |
+| **Model providers** | Ollama · vLLM · HuggingFace · in-browser (transformers.js / web-llm) |
+| **Sandbox backends** | Bridge (real machine) · in-browser (Pyodide, zero-install) |
+| **Agent tools** | `web_search` · `read_url` · `update_plan` · `schedule_task` · `research` |
+| **SDK capabilities** | shell · filesystem (`apply_patch` V4A) · skills · memory · compaction |
+| **Autonomy** | durable task queue · scheduler · critic gate · loop-guard · cron |
+| **MCP** | 3 transports · elicitation · roots · tasks — real `@modelcontextprotocol/sdk` |
+| **Voice** | Whisper → same model → Kokoro, over a `RealtimeSession` |
+| **Platform** | installable offline PWA · multi-tab locks · badging · background fetch |
+
+<details>
+<summary><b>Model — provider-aware, hardware-aware</b></summary>
+
+<br/>
+
+A provider layer (`@automo/inference`) fronts **Ollama, vLLM, HuggingFace, or a fully in-browser WebGPU engine** — `transformers.js` (ONNX) or **MLC web-llm** — both driving the agent through a custom SDK `Model` (`BrowserModel`).
+
+Hardware detection (WebGPU adapter + a VRAM budget, `deviceMemory` / UA-CH / `oscpu` / WebGL renderer / WASM SIMD+threads / mobile / storage / battery) runs at idle and is **refined to exact RAM/VRAM/chip by the bridge's `/hw` probe**, then recommends a model size on Connect.
+
+vLLM's native Responses transport enables native `apply_patch` + server-side compaction; Ollama / HuggingFace use a `ChatCompletions`-named shim (function-tool fallback). One resolver (`resolveBrainModel`) means **voice reuses the same model** — no second brain.
+
+</details>
+
+<details>
+<summary><b>Sandbox — two interchangeable backends</b></summary>
+
+<br/>
+
+Behind the SDK's `SandboxClient` / `SandboxSession` / `Editor`:
+
+1. **Bridge** — `BrowserSandboxClient` proxies every session call over a WebSocket to the SDK's `UnixLocalSandboxClient`: real processes, diffs, and snapshots on your machine.
+2. **In-browser** — `InBrowserSandboxClient` runs it all in the page: `exec` via just-bash, filesystem CRUD via the Emscripten FS + the SDK's `applyDiff` (V4A), `materializeEntry(gitRepo)` via isomorphic-git, persist/hydrate via OPFS.
+
+Selectable in Settings; the agent runs unchanged. In-browser is zero-install and sandboxed — it can't touch real host files or run native binaries.
+
+</details>
+
+<details>
+<summary><b>Autonomy — an opt-in loop that works on its own</b></summary>
+
+<br/>
+
+Off by default. When enabled, AUTOMO runs queued and scheduled work through the _same_ agent and sandbox the chat uses:
+
+- **Durable task queue** in IndexedDB (`runtime/autonomy/tasks.ts`) — goals, deps, retries, budgets, and a per-tab leader election so only one tab drives.
+- **Precise scheduler** — a self-arming timer off each task's `runAfter` (not a blind poll), with a best-effort service-worker wake.
+- **Cron recurrence** — `schedule_task` accepts a cron expression; recurring tasks re-arm on success.
+- **Critic gate** — an LLM-as-judge **output guardrail** that fails a run when it doesn't meet the goal (a retry, not a crash).
+- **Loop-guard** — a volatile-ID-stripped result fingerprint stops a task that keeps producing the same output.
+- **Plan + subagents** — an `update_plan` tool the model maintains, and a read-only `research` subagent for fan-out without polluting the main context.
+
+The queue speaks the **MCP Tasks protocol** — its status vocabulary matches the spec, it projects to MCP `Task` objects, and an in-page `automo-tasks` MCP server exposes `list` / `get` / `cancel`.
+
+</details>
+
+<details>
+<summary><b>MCP, voice, human-in-the-loop, and the rest</b></summary>
+
+<br/>
+
+- **MCP** — the real `@modelcontextprotocol/sdk` client over **three transports**: Streamable HTTP, bridge-proxied stdio, and a **pure in-page stdio** transport (a bundled Node MCP server runs in the page over `node:*` browser shims — no bridge). Elicitation, roots, and tasks all supported; server-prefixed tool names.
+- **Voice** — a `RealtimeSession` (`@openai/agents-realtime`) over a custom in-browser transport: Whisper (STT) → the same provider-aware model → Kokoro (TTS), with an AudioWorklet mic + energy VAD + barge-in, transcripts bridged into the chat.
+- **Human-in-the-loop** — tools with `needsApproval` pause the run; the transport wraps pause → approve → resume in one streamed chat turn. MCP elicitation shares the surface.
+- **Guardrails** — SDK agent + tool guardrails focused on credential safety (block pasted/leaked secrets, refuse to send secrets to web search, redact from tool output).
+- **Persistence** — sessions as AI SDK `UIMessage`s in IndexedDB; the real sandbox workspace gzip-cached per session in OPFS, optionally mirrored to a granted folder on disk; client-side compaction for long chats.
+- **PWA** — installable + offline: the service worker precaches the shell (same-origin GET only, so model/bridge/proxy traffic is untouched) and pre-downloads model weights via Background Fetch. Ships `share_target`, `file_handlers`, and `protocol_handlers`.
+
+</details>
+
+---
+
+## 🔌 The bridge
+
+The only local process — and it's **optional**. Chat, web search, the in-browser sandbox, WebGPU inference, in-page MCP, and voice all work without it. Run it when you want the _real_ machine: real files, native binaries, exact hardware sizing.
 
 ```bash
 bun run bridge   # BRIDGE_TOKEN=dev bun servers/bridge.ts → 127.0.0.1:7967
 ```
 
-The bridge is now **optional**: chat works without it, and the **in-browser sandbox** (Settings → Sandbox backend) gives shell/filesystem/git entirely in the page with nothing installed. Use the bridge when you want the *real* machine — full power, real files, native binaries. It also exposes `/hw` (a read-only hardware probe that refines the model recommendation) and, for the pure-in-page MCP path, is not needed at all. It spawns processes and runs a real shell, so a public page reaching it is remote code execution — gates: an **HMAC-SHA256 nonce challenge** before any op (the shared token is never sent in plaintext; a plaintext fallback keeps older clients working), a spawn allowlist, and it's bound to `127.0.0.1` (`BRIDGE_PORT` overridable). The sandbox `exec` is deliberately not allowlisted (it *is* the agent's shell), so **the token is the whole perimeter** — keep it secret if you ever front it with a tunnel.
+One WebSocket on `127.0.0.1:7967` carries the **sandbox RPC** (hosts `UnixLocalSandboxClient`) and a **stdio pipe** (for stdio MCP servers), plus an HTTP `/hw` hardware probe.
 
-## Connecting (once, on the machine)
+> [!WARNING]
+> The bridge spawns processes and runs a real shell — a public page reaching it is remote code execution. It's gated by an **HMAC-SHA256 nonce challenge** (the token is never sent in plaintext), a spawn allowlist, and binding to `127.0.0.1`. The sandbox `exec` is deliberately not allowlisted (it _is_ the agent's shell), so **the token is the whole perimeter** — keep it secret if you ever front it with a tunnel.
 
-1. **LNA prompt** — open the page, click **Connect**, grant Chrome's local-network prompt (Chrome ≥142, or `chrome://flags/#local-network-access-check` on 138–141).
-2. **CORS** — let Ollama accept the origin: `OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve` (macOS app: `launchctl setenv OLLAMA_ORIGINS '…'` then restart). AUTOMO diagnoses this exactly — a no-cors probe tells "running but blocked" apart from "down".
-3. **A model** — pull one; AUTOMO can trigger `/api/pull` from the browser.
+---
 
-## Develop
+## 🛠 Develop
 
 ```bash
-bun install                    # in web/
-bun run --cwd web dev          # Bun fullstack dev server (HMR)
-bun run bridge                 # the sandbox host, in another terminal
-bun run --cwd web build        # React Compiler + Tailwind → static web/dist
+bun install                      # from repo root (Bun workspace)
+bun run --cwd web dev            # Bun fullstack dev server (HMR)
+bun run bridge                   # the sandbox host, in another terminal
+bun run --cwd web build          # React Compiler + Tailwind → static web/dist
 ```
 
-`web/` is React + Tailwind, compiled by the **React Compiler** (a Babel pass wired into `build.ts`) and bundled by `bun build` to static assets. `build.ts` also injects the SEO `<head>` + service worker (with Background-Fetch handlers), copies `public/`, aliases `node:*` → the in-page MCP shims, and **conditionally externalizes** the heavy in-browser deps that aren't installed (so the bundle stays green either way; installing one makes Bun bundle it). Node-only `@openai/agents/sandbox/local` is imported **only** in the bridge; the browser bundles `@openai/agents` (+ `-core`, `-realtime`, `-extensions/ai-sdk-ui`), the raw `@modelcontextprotocol/sdk` client, `@automo/inference` (hardware / providers / embeddings / web-llm), `ai`, `@ai-sdk/react`, and — when installed — `@huggingface/transformers`, `@mlc-ai/web-llm`, `kokoro-js`, `sql.js`, `isomorphic-git`, `just-bash` (Pyodide loads from CDN). The repo is a Bun workspace: `web/` (the agent), `servers/` (the bridge), `inference/` (`@automo/inference`).
+`web/` is React + Tailwind, compiled by the **React Compiler** and bundled by `bun build` to static assets. The build ([`web/scripts/build.ts`](web/scripts/build.ts)) injects the SEO `<head>` + service worker, copies `public/`, aliases `node:*` → the in-page MCP shims, generates the lazy-skills index, and **conditionally externalizes** the heavy in-browser deps that aren't installed — so the bundle stays green either way.
 
-## Deploy
+> [!IMPORTANT]
+> `@openai/agents/sandbox/local` (`UnixLocalSandboxClient`) is **Node-only** — imported _only_ in `servers/bridge.ts`, never in the browser bundle.
 
-Push to `main` under `web/**` → `.github/workflows/pages.yml` runs `bun install && bun run build` and publishes `web/dist` to Pages. The site URL is **derived, not hardcoded** — from `public/CNAME` (custom domain), else the repo (`GITHUB_REPOSITORY` / git remote → `<owner>.github.io/<repo>/`), with `SITE_ORIGIN`/`PUBLIC_PATH` env overrides — so canonical/OG/sitemap/robots/manifest/icon paths regenerate automatically. A custom domain is just a `public/CNAME` file.
+**Bun workspace:** `web/` (the agent) · `servers/` (the bridge) · `inference/` (`@automo/inference`).
 
-## Verified
+---
 
-- **Builds clean** — `tsc --noEmit` and the Bun bundler are green with **every** in-browser dep installed and bundled: transformers.js, MLC web-llm, kokoro-js, sql.js, isomorphic-git, just-bash, and the full `node:*` shim set (just-bash's `node:zlib` resolves to the shim; zero `node:` leaks in the output).
-- **Bridge HMAC handshake** — tested live: the HMAC challenge authenticates, the legacy plaintext token still works, a wrong secret is rejected.
-- **Bridge `/hw` probe** — tested live on macOS: returns exact chip / RAM / cores, refining the model recommendation.
-- **Workspace persistence primitives** — gzip + chunked-base64 round-trip is byte-identical on 250 KB.
-- **Earlier E2E** — an in-browser SandboxAgent streamed `reasoning → exec_command → apply_patch → message` against a local bridge + Ollama; a `needsApproval` tool paused/resumed; an input guardrail tripped on a pasted credential.
+## 🧪 Testing
 
-Runtime behavior of the newer in-browser surface — WebGPU inference (transformers.js / web-llm), voice (Whisper/Kokoro), the in-browser Pyodide sandbox (exec/git/persist), in-page MCP round-trips, semantic rerank, Background Fetch, and PWA install/share/file-open — bundles and type-checks but needs a real browser (WebGPU/OPFS/SW) to smoke-test.
+| Suite | Covers | Run |
+| --- | --- | --- |
+| **Unit** (22, `bun:test`) | JSON repair · loop-guard · cron · MCP-task projection | `bun run --cwd web test` |
+| **E2E** (Playwright ×3 browsers) | gate + clip regression · layout · onboarding · connected app (mocked) | `bun run --cwd web test:e2e` |
+| **Smoke** | in-browser sql.js / MCP / Pyodide / embeddings | `bun run --cwd web smoke:build` |
+| **Visual** | `Bun.WebView` screenshots (WKWebView, zero-dep) | `bun run --cwd web smoke:visual` |
 
-## Sources
+E2E runs on **chromium, mobile-chrome, and webkit** against the real production bundle (built and served by `tests/preview.ts`). New tests are auto-discovered — drop a `*.test.ts` in `tests/unit/` or a `*.spec.ts` in `tests/e2e/` and it runs locally and in CI. See [`web/tests/README.md`](web/tests/README.md).
 
-- [WICG Local Network Access spec](https://wicg.github.io/local-network-access/)
-- [Chrome: New permission prompt for Local Network Access](https://developer.chrome.com/blog/local-network-access)
-- [MDN: Local network access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access) · [OpenAI Agents JS](https://openai.github.io/openai-agents-js/) · [Vercel AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui)
+> What can't be tested headless — voice, the Pyodide sandbox, WebGPU inference, real inference over LNA — is covered by the smoke harness or verified manually.
 
-Unofficial, not affiliated with Google, Mozilla, OpenAI, or Vercel.
+---
+
+## 🚢 Deploy
+
+Push to `main` under `web/**` → [`pages.yml`](.github/workflows/pages.yml) runs `bun install && bun run build` and publishes `web/dist` to Pages. The site URL is **derived, not hardcoded** — from `public/CNAME` (custom domain), else the repo (`GITHUB_REPOSITORY` / git remote), with `SITE_ORIGIN` / `PUBLIC_PATH` overrides — so canonical / OG / sitemap / manifest paths regenerate automatically. A custom domain is just a `public/CNAME` file.
+
+---
+
+## 📚 Sources
+
+- [WICG Local Network Access spec](https://wicg.github.io/local-network-access/) · [Chrome LNA permission](https://developer.chrome.com/blog/local-network-access) · [MDN: Local network access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access)
+- [OpenAI Agents JS](https://openai.github.io/openai-agents-js/) · [Vercel AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui) · [Model Context Protocol](https://modelcontextprotocol.io)
+
+<sub>Unofficial. Not affiliated with Google, Mozilla, OpenAI, or Vercel.</sub>
