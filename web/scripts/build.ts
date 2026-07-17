@@ -7,7 +7,7 @@
 //      read from GITHUB_REPOSITORY (CI) or `git remote get-url origin` (local).
 //   3. env still overrides everything: SITE_ORIGIN and/or PUBLIC_PATH.
 import tailwind from "bun-plugin-tailwind";
-import { reactCompiler } from "../react-compiler-plugin";
+import { reactCompiler } from "../compiler";
 import { writeSkillsIndex } from "./gen-skills-index";
 import { cp } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
