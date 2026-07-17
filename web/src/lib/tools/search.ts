@@ -72,7 +72,8 @@ async function fetchPage(target: string, session: any): Promise<string> {
   for (const make of PROXIES) {
     const { url, json } = make(target);
     try {
-      const r = await fetch(url, { headers: { Accept: "text/html,application/json" } });
+      // bound each proxy attempt so one slow proxy can't stall the whole agent turn
+      const r = await fetch(url, { headers: { Accept: "text/html,application/json" }, signal: AbortSignal.timeout(15_000) });
       if (!r.ok) continue;
       const text = await r.text();
       const body = json ? (JSON.parse(text)?.contents ?? "") : text;

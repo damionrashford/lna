@@ -5,8 +5,9 @@
 // that wakes an open client to pump. The agent only runs in the page (it needs the model and DOM), so
 // a fully-closed tab can't run tasks; the SW path only widens the window a backgrounded tab gets poked.
 import { tick } from "./loop";
-import { hasDueWork, nextRunAfter, expireStale } from "./tasks";
+import { hasDueWork, nextRunAfter, expireStale, resetOrphanedTasks } from "./tasks";
 import { logEvent } from "../../../store";
+import { shouldThrottle, onEnvironmentChange } from "../../platform/environment";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let timer: any = null;
@@ -22,7 +23,8 @@ const CEIL_HIDDEN_MS = 5 * 60_000;
 const isHidden = () => typeof document !== "undefined" && document.visibilityState !== "visible";
 
 async function pump(): Promise<void> {
-  if (isHidden()) return; // only run the agent while foregrounded (it needs the page)
+  if (isHidden()) return;       // only run the agent while foregrounded (it needs the page)
+  if (shouldThrottle()) return; // ease off a throttling device (thermal pressure or low battery); a later env change re-arms
   try { await expireStale(); if (await hasDueWork()) await tick(); } catch (e: any) { logEvent("warn", "scheduler pump: " + (e?.message ?? e)); }
 }
 
@@ -58,11 +60,14 @@ async function registerBackgroundDrain(): Promise<void> {
   } catch { /* unsupported/ungranted — foreground drain remains the primary path */ }
 }
 
+let offEnv: (() => void) | null = null;
 export function startScheduler(): void {
   if (running) return;
   running = true;
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", wake);
   if (typeof window !== "undefined") window.addEventListener("focus", wake);
+  offEnv = onEnvironmentChange(wake); // re-arm when connectivity/pressure/battery changes (throttle may lift)
+  void resetOrphanedTasks().then((n) => { if (n) logEvent("info", `re-armed ${n} task(s) interrupted by a tab discard`); });
   void registerBackgroundDrain();
   wake(); // drain anything already due, then arm the first precise timer
   logEvent("info", "autonomous scheduler started (precise wall-clock timer + best-effort SW wake)");
@@ -73,6 +78,7 @@ export function stopScheduler(): void {
   if (timer) { clearTimeout(timer); timer = null; }
   if (typeof document !== "undefined") document.removeEventListener("visibilitychange", wake);
   if (typeof window !== "undefined") window.removeEventListener("focus", wake);
+  offEnv?.(); offEnv = null;
   const sw = (navigator as any)?.serviceWorker;
   if (sw) sw.removeEventListener("message", onSwMessage);
 }

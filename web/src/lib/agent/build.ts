@@ -26,7 +26,7 @@ export function buildInstructions(ctx: AutomoContext): string {
   const base = personalize(ctx.settings.systemPrompt || DEFAULT_INSTRUCTIONS);
   const folder = ctx.env.folder ?? "none";
   const mcp = ctx.env.mcpServers;
-  return `${base}\n\n[Run context — model: ${ctx.settings.model || "unknown"} · granted folder: ${folder} · MCP servers: ${mcp.length ? mcp.join(", ") : "none"} · date: ${ctx.env.startedAt}]`;
+  return `${base}\n\n[Run context — model: ${ctx.settings.model || "unknown"} · granted folder: ${folder} · MCP servers: ${mcp.length ? mcp.join(", ") : "none"} · date: ${ctx.env.startedAt}]\n[Environment — ${ctx.env.capabilities}. Work within what's available: when offline, rely on memory and the sandbox rather than web_search or a remote model.]`;
 }
 
 // Build the SandboxAgent (typed over AutomoContext) with the full capability set. instructions is a

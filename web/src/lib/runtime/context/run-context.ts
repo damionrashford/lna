@@ -10,9 +10,10 @@
 //      may hold live handles (the sandbox session) but must not hold secrets — the bridge token stays in
 //      settings/localStorage and is used only at connect time, never parked in context.
 import type { SandboxSession } from "@openai/agents/sandbox";
-import { S, logEvent } from "../../../store";
+import { S, logEvent, getState } from "../../../store";
 import { getFsRoot } from "../../storage/opfs";
 import { connectedMcpLabels } from "../../mcp/index";
+import { environmentLine } from "../../platform/environment";
 
 export interface AutomoContext {
   /** live sandbox session for this run (null until the bridge connects); used by tools like web_search */
@@ -34,6 +35,7 @@ export interface AutomoContext {
     folder: string | null;      // granted mirror-folder name, or null
     mcpServers: string[];       // connected MCP server labels
     startedAt: string;          // ISO date (yyyy-mm-dd)
+    capabilities: string;       // live connectivity/device/capability summary (see environmentLine)
   };
   /** structured logger tools/hooks can call — console today, a debug panel/telemetry sink later */
   log: (level: "info" | "warn" | "error", msg: string, data?: unknown) => void;
@@ -60,6 +62,7 @@ export function buildContext(session: SandboxSession<any> | null, sessionId: str
       // reason — it stays identical all day.
       mcpServers: connectedMcpLabels().sort(),
       startedAt: new Date().toISOString().slice(0, 10),
+      capabilities: environmentLine(getState().caps.bridge.dot === "ok"),
     },
     log: (level, msg, data) =>
       logEvent(level, data !== undefined ? `${msg} ${typeof data === "string" ? data : JSON.stringify(data)}` : msg),

@@ -41,7 +41,7 @@ lna/
 │           ├── voice/        session · transport (RealtimeSession over local STT→model→TTS) · asr (Whisper) · tts (Kokoro) · audio (mic+VAD+playback) · pcm · config
 │           ├── net/          index (LNA fetch · bridge probe · /hw) · handshake (HMAC)
 │           ├── storage/      idb · opfs (File System Access) · sql (sql.js SQLite)
-│           ├── platform/     locks · tabs · wakelock · badge · bgfetch (Background Fetch) · pwa (share/file handlers · install)
+│           ├── platform/     locks · tabs · wakelock · badge · bgfetch (Background Fetch) · pwa (share/file handlers · install) · environment (live capability/connectivity/device model → run-context + adaptive scheduling) · errors (global error net) · lifecycle (freeze/pagehide durability) · perf (long-task jank)
 │           ├── tools/        search (web_search + read_url, in-browser rerank) · plan (update_plan) · schedule (schedule_task; cron) · subagent (read-only research fan-out)
 │           └── hitl/         approvals (tool approval + MCP elicitation)
 ├── servers/                  @automo/servers — the local access daemon

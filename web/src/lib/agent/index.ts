@@ -159,6 +159,11 @@ export async function boot() {
   setStatus("", "not connected");
   const { installObservability } = await import("../runtime/context/trace");
   installObservability(); // SDK tracing → console + debug panel (chat and autonomous runs)
+  // Environment self-model, global error net, page-lifecycle durability, and long-task jank detection.
+  (await import("../platform/environment")).initEnvironment();
+  (await import("../platform/errors")).initErrorHarness();
+  (await import("../platform/lifecycle")).initLifecycle();
+  (await import("../platform/perf")).initPerf();
   // First run: show the welcome once (non-blocking); mirror the profile name for the greeting.
   const { getProfile } = await import("../runtime/context/profile");
   const prof = getProfile();

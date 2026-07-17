@@ -80,6 +80,19 @@ export async function removeTask(id: string): Promise<void> {
   try { await idbSet("auto.thread:" + id, undefined); } catch { /* noop */ }
 }
 
+// A task left `working`/`input_required` when the tab was frozen, discarded, or closed can't finish on its
+// own; re-arm it to `pending` on boot so the loop runs it again. Returns the count re-armed.
+export async function resetOrphanedTasks(): Promise<number> {
+  const all = await getTasks();
+  let n = 0;
+  const next = all.map((t) => {
+    if (t.status === "working" || t.status === "input_required") { n++; return { ...t, status: "pending" as const, runAfter: now(), note: "re-armed after interruption" }; }
+    return t;
+  });
+  if (n) await putTasks(next);
+  return n;
+}
+
 // The queue's core query: the earliest pending task whose schedule has arrived and whose deps are done.
 export async function dequeueReady(at = now()): Promise<Task | null> {
   const all = await getTasks();
