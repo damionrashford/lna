@@ -4,11 +4,6 @@
 // the composer, header, and settings surfaces become testable without a backend.
 import { test, expect, type Page } from "@playwright/test";
 
-async function dismissOnboarding(page: Page) {
-  const skip = page.locator(".ob-skip");
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-}
-
 // Fake a reachable Ollama with one chat model, then connect through the gate.
 async function connect(page: Page) {
   await page.route("**/api/tags", (route) =>
@@ -17,8 +12,10 @@ async function connect(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // deterministically skip the first-run overlay (marking the profile onboarded) so it can never race the
+  // connect button — set before any app script runs
+  await page.addInitScript(() => localStorage.setItem("automo.profile", JSON.stringify({ onboarded: true })));
   await page.goto("/");
-  await dismissOnboarding(page);
 });
 
 test("connecting reveals the chat composer and hides the gate", async ({ page }) => {

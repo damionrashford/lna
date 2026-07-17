@@ -1,18 +1,12 @@
 // E2E: the "Connect to your machine" onboarding gate — the app's first screen before any model
 // connection, and the main surface a headless runner can exercise (no local Ollama in CI). Includes a
 // regression for the step-1 command that used to clip its tail (`ollama serve`) under the copy button.
-import { test, expect, type Page } from "@playwright/test";
-
-// The first-run welcome is a non-blocking overlay (Skip / Esc / backdrop). Dismiss it so the gate is
-// interactable; best-effort since a returning profile won't show it.
-async function dismissOnboarding(page: Page) {
-  const skip = page.locator(".ob-skip");
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-}
+import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
+  // skip the first-run overlay deterministically (mark the profile onboarded before any app script runs)
+  await page.addInitScript(() => localStorage.setItem("automo.profile", JSON.stringify({ onboarded: true })));
   await page.goto("/");
-  await dismissOnboarding(page);
 });
 
 test("renders the gate with all three steps", async ({ page }) => {
