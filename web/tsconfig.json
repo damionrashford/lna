@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": ["src", "build.ts", "gen-skills-index.ts", "tests"]
+  "include": ["src", "build.ts", "gen-skills-index.ts", "tests", "playwright.config.ts"]
 }

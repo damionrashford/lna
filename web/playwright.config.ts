@@ -5,8 +5,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4173;
-const baseURL = `http://localhost:${PORT}`;
 const CI = !!process.env.CI;
+// Dev-mode escape hatch: point tests at an already-running server (e.g. `bun run dev`) and skip the
+// build+serve entirely — `E2E_BASE_URL=http://localhost:3000 bun run test:e2e`. Default targets the
+// production bundle served by tests/preview.ts for deterministic runs (and CI).
+const externalBase = process.env.E2E_BASE_URL;
+const baseURL = externalBase ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -30,7 +34,9 @@ export default defineConfig({
     { name: "webkit", use: { ...devices["Desktop Safari"] } }, // cross-engine render check of the static UI
   ],
   // Build the app at the root base path, then serve the bundle. Playwright waits for the URL before tests.
-  webServer: {
+  // Skip the build+serve when pointed at an external server (dev mode); otherwise build the production
+  // bundle at a root base path and serve web/dist.
+  webServer: externalBase ? undefined : {
     command: `PUBLIC_PATH=/ bun run build && PORT=${PORT} bun run ./tests/preview.ts`,
     url: baseURL,
     timeout: 120_000,

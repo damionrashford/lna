@@ -17,6 +17,7 @@
     "test:all": "bun run test && bun run test:e2e",
     "codegen": "playwright codegen http://localhost:4173",
     "smoke:build": "bun run ./tests/smoke/build-smoke.ts",
+    "smoke:visual": "bun run ./tests/visual-smoke.ts",
     "preview": "bun run ./tests/preview.ts"
   },
   "dependencies": {

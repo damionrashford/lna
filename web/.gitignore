@@ -7,3 +7,5 @@ dist-smoke/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+# Bun visual-smoke screenshots
+/tests/screenshots/
