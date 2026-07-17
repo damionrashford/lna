@@ -4,10 +4,8 @@
 // the composer, header, and settings surfaces become testable without a backend.
 import { test, expect, type Page } from "@playwright/test";
 
-// Fake a reachable Ollama with one chat model, then connect through the gate.
+// Just click the gate CTA — the fake model list is served by the fetch override installed in beforeEach.
 async function connect(page: Page) {
-  await page.route("**/api/tags", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ models: [{ name: "llama3.2" }] }) }));
   await page.getByRole("button", { name: /connect to your machine/i }).click();
 }
 
@@ -15,9 +13,16 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     // skip the first-run overlay so it can't race the connect button
     localStorage.setItem("automo.profile", JSON.stringify({ onboarded: true }));
-    // point the model URL at the test's OWN origin so /api/tags is same-origin — avoids the cross-address
-    // Local-Network-Access preflight that a headless CI browser blocks (and that page.route can't fulfill)
-    localStorage.setItem("automo.url", location.origin);
+    // Fake a reachable Ollama by overriding fetch for /api/tags. The app's localFetch always sets
+    // targetAddressSpace:"loopback" (a Local-Network-Access hint) which headless Linux Chromium routes
+    // outside page.route's reach — so we stub at the fetch level instead: OS-independent, no real network.
+    const orig = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
+      if (url.includes("/api/tags"))
+        return Promise.resolve(new Response(JSON.stringify({ models: [{ name: "llama3.2" }] }), { status: 200, headers: { "content-type": "application/json" } }));
+      return orig(input as any, init);
+    }) as typeof fetch;
   });
   await page.goto("/");
 });

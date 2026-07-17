@@ -8,9 +8,9 @@ import { readdirSync, existsSync, statSync, readFileSync, writeFileSync } from "
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SKILLS_DIR = join(here, "..", ".agents", "skills");
-const OUT = join(here, "src", "lib", "agent", "skills.generated.ts");
+const here = dirname(fileURLToPath(import.meta.url)); // web/scripts
+const SKILLS_DIR = join(here, "..", "..", ".agents", "skills"); // lna/.agents/skills
+const OUT = join(here, "..", "src", "lib", "agent", "skills.generated.ts"); // web/src/lib/agent/…
 
 // SKILL.md frontmatter is the same trivial `key: value` YAML the SDK's parseSkillFrontmatter reads.
 function frontmatter(md: string): Record<string, string> {

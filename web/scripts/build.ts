@@ -7,17 +7,21 @@
 //      read from GITHUB_REPOSITORY (CI) or `git remote get-url origin` (local).
 //   3. env still overrides everything: SITE_ORIGIN and/or PUBLIC_PATH.
 import tailwind from "bun-plugin-tailwind";
-import { reactCompiler } from "./react-compiler-plugin";
+import { reactCompiler } from "../react-compiler-plugin";
 import { writeSkillsIndex } from "./gen-skills-index";
 import { cp } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+// web/ root, relative to this script at web/scripts/ — used for module-relative resolves. The CWD-relative
+// paths further down (./public, ./index.html, ./dist) assume the build runs from web/ (the package script).
+const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
 // Alias the Node builtins that a bundled in-page stdio MCP server imports (e.g. the MCP SDK's
 // StdioServerTransport → `import process from "node:process"`) to our browser shims, so such servers
 // bundle + run in the page. Inert for the rest of the app (nothing else imports node: builtins).
-const shimsDir = join(dirname(fileURLToPath(import.meta.url)), "src/lib/mcp/shims");
+const shimsDir = join(webRoot, "src/lib/mcp/shims");
 const NODE_SHIMS: Record<string, string> = {
   "node:process": "process.ts", "node:fs": "fs.ts", "node:fs/promises": "fs-promises.ts",
   "node:crypto": "crypto.ts", "node:url": "url.ts", "node:zlib": "node-zlib.ts", // full surface incl. constants (just-bash)
