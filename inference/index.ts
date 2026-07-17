@@ -2,8 +2,10 @@
 //   detectHardware() → recommendModel()   machine profile + model-size recommendation (browser APIs)
 //   providerFor() / pickProvider()          unified interface over ollama / vllm / huggingface / browser
 //   createBrowserEngine()                   in-browser WebGPU/WASM engine via transformers.js
+//   createWorkerEngine()                     that engine hosted in a dedicated worker (off the main thread)
 export * from "./hardware";
 export * from "./provider";
 export * from "./transformers";
 export * from "./embed";
 export * from "./webllm";
+export * from "./worker-engine";

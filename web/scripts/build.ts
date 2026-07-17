@@ -111,6 +111,25 @@ if (!result.success) {
   process.exit(1);
 }
 
+// The inference worker is its own module graph (a Worker doesn't share the page bundle). Bun's HTML build
+// leaves `new Worker(new URL(...))` unbundled, so build it separately to a stable filename that
+// worker-engine.ts loads at <base>/inference-worker.js. Same plugins so the node shims + transformers
+// web build apply here too.
+const workerBuild = await Bun.build({
+  entrypoints: [join(webRoot, "..", "inference/browser.worker.ts")],
+  outdir: "./dist",
+  naming: "inference-worker.[ext]",
+  minify: true,
+  sourcemap: Bun.env.SOURCEMAPS === "1" ? "linked" : "none",
+  publicPath: base,
+  external: externalDeps,
+  plugins: [nodeShimPlugin],
+});
+if (!workerBuild.success) {
+  for (const log of workerBuild.logs) console.error(log);
+  process.exit(1);
+}
+
 // ---- SEO block, injected before </head> so Bun never tries to bundle the icon/manifest refs ----
 const seo = `
 <link rel="canonical" href="${site}">
