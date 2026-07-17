@@ -10,23 +10,37 @@ export interface Embedder {
   unload(): Promise<void>;
 }
 
+const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2"; // 384-dim sentence embeddings — good rerank at low cost
+
+// Direct transformers.js embedder. The inference worker hosts this; the main thread uses the worker-backed
+// one via getEmbedder().
+export async function createLocalEmbedder(model = DEFAULT_MODEL): Promise<Embedder> {
+  const tf: any = await import("@huggingface/transformers").catch(() => {
+    throw new Error("Semantic rerank needs `@huggingface/transformers` — add it to embed in the browser.");
+  });
+  const device = (navigator as any).gpu ? "webgpu" : "wasm";
+  const pipe = await tf.pipeline("feature-extraction", model, { device });
+  return {
+    async embed(texts: string[]) {
+      const out = await pipe(texts, { pooling: "mean", normalize: true });
+      return out.tolist() as number[][];
+    },
+    async unload() { try { await pipe?.dispose?.(); } catch { /* noop */ } },
+  };
+}
+
 let embedderPromise: Promise<Embedder> | null = null;
-// small 384-dim sentence-embedding model — good rerank quality at low cost
-export async function getEmbedder(model = "Xenova/all-MiniLM-L6-v2"): Promise<Embedder> {
+// Embeds in the inference worker (off the main thread); falls back to a direct embedder when the worker
+// is unavailable. Cached across calls.
+export async function getEmbedder(model = DEFAULT_MODEL): Promise<Embedder> {
   if (embedderPromise) return embedderPromise;
   embedderPromise = (async () => {
-    const tf: any = await import("@huggingface/transformers").catch(() => {
-      throw new Error("Semantic rerank needs `@huggingface/transformers` — add it to embed in the browser.");
-    });
-    const device = (navigator as any).gpu ? "webgpu" : "wasm";
-    const pipe = await tf.pipeline("feature-extraction", model, { device });
-    return {
-      async embed(texts: string[]) {
-        const out = await pipe(texts, { pooling: "mean", normalize: true });
-        return out.tolist() as number[][];
-      },
-      async unload() { try { await pipe?.dispose?.(); } catch { /* noop */ } },
-    };
+    try {
+      const { createWorkerEmbedder } = await import("./worker-engine");
+      return await createWorkerEmbedder(model);
+    } catch {
+      return createLocalEmbedder(model);
+    }
   })().catch((e) => { embedderPromise = null; throw e; });
   return embedderPromise;
 }

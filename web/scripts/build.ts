@@ -119,8 +119,9 @@ if (!result.success) {
 // unbundled, so each is built to a stable filename the proxies load at <base>/<name>.js. Same plugins so
 // node shims + the transformers web build apply.
 for (const [entry, name] of [
-  [join(webRoot, "..", "inference/browser.worker.ts"), "inference-worker.[ext]"],       // transformers.js
+  [join(webRoot, "..", "inference/browser.worker.ts"), "inference-worker.[ext]"],       // transformers.js gen + embed
   [join(webRoot, "src/lib/sandbox/inbrowser/sandbox.worker.ts"), "sandbox-worker.[ext]"], // Pyodide + git
+  [join(webRoot, "src/lib/voice/asr.worker.ts"), "voice-worker.[ext]"],                 // Whisper STT
 ] as const) {
   const wb = await Bun.build({
     entrypoints: [entry],

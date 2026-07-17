@@ -4,6 +4,7 @@
 // when the model changes. Bundled by scripts/build.ts — the node-shim and transformers web-build plugins
 // apply to this worker too. (web-llm keeps its own library-managed worker and runs on the main thread.)
 import { createBrowserEngine, type BrowserEngine } from "./transformers";
+import { createLocalEmbedder, type Embedder } from "./embed";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let engine: BrowserEngine | null = null;
@@ -17,6 +18,16 @@ async function engineFor(model: string, dtype: string): Promise<BrowserEngine> {
   return engine;
 }
 
+let embedder: Embedder | null = null;
+let embedModel = "";
+async function embedderFor(model: string): Promise<Embedder> {
+  if (embedder && embedModel === model) return embedder;
+  if (embedder) { try { await embedder.unload(); } catch { /* best-effort */ } embedder = null; }
+  embedModel = model;
+  embedder = await createLocalEmbedder(model);
+  return embedder;
+}
+
 self.addEventListener("message", async (e: MessageEvent) => {
   const d: any = e.data;
   const post = (m: any) => (self as any).postMessage(m);
@@ -27,8 +38,14 @@ self.addEventListener("message", async (e: MessageEvent) => {
       const eng = await engineFor(d.model, d.dtype);
       const text = await eng.chat(d.msgs, { maxNewTokens: d.maxNewTokens, onToken: (t) => post({ id: d.id, type: "token", t }) });
       post({ id: d.id, type: "done", text });
+    } else if (d.op === "embed") {
+      const emb = await embedderFor(d.model);
+      post({ id: d.id, type: "done", result: await emb.embed(d.texts) });
     } else if (d.op === "unload") {
       if (engine) { try { await engine.unload(); } catch { /* best-effort */ } engine = null; loaded = ""; }
+      post({ id: d.id, type: "done", text: "" });
+    } else if (d.op === "unloadEmbedder") {
+      if (embedder) { try { await embedder.unload(); } catch { /* best-effort */ } embedder = null; embedModel = ""; }
       post({ id: d.id, type: "done", text: "" });
     }
   } catch (err: any) {

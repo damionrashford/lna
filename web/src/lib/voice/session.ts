@@ -11,7 +11,7 @@ import { installModelProvider } from "../runtime/model/model";
 import { loadVoiceConfig } from "./config";
 import { LocalRealtimeTransport } from "./transport";
 import { VoiceAudio } from "./audio";
-import { createStt } from "./asr";
+import { createWorkerStt } from "./worker-stt";
 import { Tts } from "./tts";
 import { pcm16ToArrayBuffer } from "./pcm";
 
@@ -32,7 +32,7 @@ export async function startVoice(): Promise<void> {
   try {
     installModelProvider(S.model); // ensure the shared model provider is live for the transport
     const cfg = loadVoiceConfig();
-    const stt = await createStt(cfg.asrModelId, "q8");
+    const stt = await createWorkerStt(cfg.asrModelId, "q8");
     const tts = new Tts(cfg.ttsModelId, cfg.ttsDtype, cfg.ttsVoice);
     await tts.load();
 

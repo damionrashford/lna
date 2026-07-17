@@ -6,6 +6,7 @@
 // pings it before use; a failed ping (missing build in dev, blocked worker, no WebGPU) rejects so the
 // caller runs on the main thread instead.
 import type { BrowserEngine } from "./transformers";
+import type { Embedder } from "./embed";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // import.meta.url resolves to this chunk's URL at the site base, so the sibling worker file lands at
@@ -19,15 +20,16 @@ function getWorker(): Worker {
 }
 
 let seq = 0;
-function call(op: string, payload: any, onToken?: (t: string) => void): Promise<string> {
+// Resolves with the done message's `result` (embeddings) or `text` (generation).
+function call<T = any>(op: string, payload: any, onToken?: (t: string) => void): Promise<T> {
   const w = getWorker();
   const id = ++seq;
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const onMsg = (e: MessageEvent) => {
       const d: any = e.data;
       if (d?.id !== id) return;
       if (d.type === "token") onToken?.(d.t);
-      else if (d.type === "done") { w.removeEventListener("message", onMsg); resolve(d.text); }
+      else if (d.type === "done") { w.removeEventListener("message", onMsg); resolve(d.result ?? d.text); }
       else if (d.type === "error") { w.removeEventListener("message", onMsg); reject(new Error(d.message)); }
     };
     w.addEventListener("message", onMsg);
@@ -47,7 +49,16 @@ export async function createWorkerEngine(model: string, kind: "transformers" | "
   await ping(); // throws where the worker is unavailable → caller uses the main-thread engine
   return {
     model,
-    chat: (msgs, opts) => call("chat", { model, kind, dtype, msgs, maxNewTokens: opts?.maxNewTokens }, opts?.onToken),
+    chat: (msgs, opts) => call<string>("chat", { model, kind, dtype, msgs, maxNewTokens: opts?.maxNewTokens }, opts?.onToken),
     unload: async () => { await call("unload", {}); },
+  };
+}
+
+// Semantic-rerank embedder that runs in the same worker (feature-extraction, off the main thread).
+export async function createWorkerEmbedder(model: string): Promise<Embedder> {
+  await ping();
+  return {
+    embed: (texts) => call<number[][]>("embed", { model, texts }),
+    unload: async () => { await call("unloadEmbedder", {}); },
   };
 }
