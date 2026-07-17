@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore, S, set, setProfileName } from "../store";
 import { getProfile, saveProfile, type Tone } from "../lib/runtime/profile";
+import { enqueueTask } from "../lib/runtime/tasks";
 import {
   createSession, switchSession, deleteSession, pullModel,
   addRepo, snapshotWorkspace, restoreSnapshot, deleteSnapshot,
@@ -31,6 +32,8 @@ export default function Settings() {
   const [mcpTransport, setMcpTransport] = useState<"http" | "stdio" | "inpage">("http");
   const [mcpTarget, setMcpTarget] = useState("");
   const [mcpAuth, setMcpAuth] = useState("");
+  const [autonomous, setAutonomous] = useState(S.autonomous);
+  const [taskText, setTaskText] = useState("");
   const [pname, setPname] = useState(getProfile().name);
   const [pfocus, setPfocus] = useState(getProfile().focus);
   const [ptone, setPtone] = useState<Tone>(getProfile().tone);
@@ -185,6 +188,17 @@ export default function Settings() {
               <input type="checkbox" checked={guardrails} onChange={(e) => { setGuardrails(e.target.checked); S.guardrails = e.target.checked; }} /> Credential guardrails (block pasted/leaked secrets; redact tool output)
             </label>
             <div className="note"><b>Streamable HTTP</b> connects directly (LNA-gated for local; auth + headers supported). <b>stdio</b> runs the command through the bridge daemon over LNA. Tools become the agent's tools (prefixed <code>mcp_&lt;label&gt;_</code>). Hosted MCP tools aren't listed — they route through OpenAI's Responses API and need an OpenAI model, not a local one.</div></div>
+
+          <div className="field"><label>Autonomous mode</label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.82rem", color: "var(--ink-mid)", cursor: "pointer" }}>
+              <input type="checkbox" checked={autonomous} onChange={async (e) => { const on = e.target.checked; setAutonomous(on); S.autonomous = on; const s = await import("../lib/runtime/scheduler"); on ? s.startScheduler() : s.stopScheduler(); }} /> Let AUTOMO work on queued tasks on its own
+            </label>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input placeholder="queue a task for AUTOMO to do…" style={{ flex: 1 }} value={taskText} onChange={(e) => setTaskText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && taskText.trim()) { enqueueTask({ prompt: taskText.trim() }); setTaskText(""); } }} />
+              <button disabled={!autonomous || !taskText.trim()} onClick={() => { enqueueTask({ prompt: taskText.trim() }); setTaskText(""); }} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "0 15px", color: "var(--ink)", fontSize: "0.8rem", cursor: "pointer" }}>Queue</button>
+            </div>
+            <div className="note">The agent runs queued tasks by itself using the same tools + sandbox. It only runs while this tab is open — the browser gives no reliable background scheduling, so treat it as "runs when I'm around," not a guaranteed cron. Approval + guardrails still apply; a task needing approval waits for you.</div></div>
 
           <div className="field"><label>System prompt</label>
             <textarea rows={4} spellCheck={false} placeholder="(using the built-in AUTOMO default — describe custom behavior here to override)" style={{ fontFamily: "inherit", resize: "vertical", lineHeight: 1.5 }} value={instructions} onChange={(e) => setInstructions(e.target.value)} onBlur={() => { S.instructions = instructions; }} />

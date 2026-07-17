@@ -163,6 +163,9 @@ export const S = {
   // just-bash + isomorphic-git in the page — zero install, sandboxed, can't touch real host files).
   get sandbox() { return (localStorage.getItem("automo.sandbox") || "bridge") as "bridge" | "inbrowser"; },
   set sandbox(v: string) { localStorage.setItem("automo.sandbox", v); },
+  // autonomous mode: run queued/scheduled tasks on their own (opt-in; off by default).
+  get autonomous() { return localStorage.getItem("automo.autonomous") === "1"; },
+  set autonomous(v: boolean) { localStorage.setItem("automo.autonomous", v ? "1" : "0"); },
 };
 
 export const trimUrl = () => S.url.replace(/\/$/, "");
