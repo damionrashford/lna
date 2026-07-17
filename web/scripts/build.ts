@@ -115,19 +115,24 @@ if (!result.success) {
 // leaves `new Worker(new URL(...))` unbundled, so build it separately to a stable filename that
 // worker-engine.ts loads at <base>/inference-worker.js. Same plugins so the node shims + transformers
 // web build apply here too.
-const workerBuild = await Bun.build({
-  entrypoints: [join(webRoot, "..", "inference/browser.worker.ts")],
-  outdir: "./dist",
-  naming: "inference-worker.[ext]",
-  minify: true,
-  sourcemap: Bun.env.SOURCEMAPS === "1" ? "linked" : "none",
-  publicPath: base,
-  external: externalDeps,
-  plugins: [nodeShimPlugin],
-});
-if (!workerBuild.success) {
-  for (const log of workerBuild.logs) console.error(log);
-  process.exit(1);
+// Web Workers are separate module graphs, and Bun's HTML build leaves `new Worker(new URL(...))`
+// unbundled, so each is built to a stable filename the proxies load at <base>/<name>.js. Same plugins so
+// node shims + the transformers web build apply.
+for (const [entry, name] of [
+  [join(webRoot, "..", "inference/browser.worker.ts"), "inference-worker.[ext]"],       // transformers.js
+  [join(webRoot, "src/lib/sandbox/inbrowser/sandbox.worker.ts"), "sandbox-worker.[ext]"], // Pyodide + git
+] as const) {
+  const wb = await Bun.build({
+    entrypoints: [entry],
+    outdir: "./dist",
+    naming: name,
+    minify: true,
+    sourcemap: Bun.env.SOURCEMAPS === "1" ? "linked" : "none",
+    publicPath: base,
+    external: externalDeps,
+    plugins: [nodeShimPlugin],
+  });
+  if (!wb.success) { for (const log of wb.logs) console.error(log); process.exit(1); }
 }
 
 // ---- SEO block, injected before </head> so Bun never tries to bundle the icon/manifest refs ----

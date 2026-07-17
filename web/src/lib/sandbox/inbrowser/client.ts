@@ -15,7 +15,7 @@ import { u8ToB64 } from "../index";
 const abs = (p: string) => (p.startsWith("/") ? normalize(p) : normalize(MOUNT_PATH + "/" + p));
 const b64ToU8 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-class InBrowserSandboxSession implements SandboxSession<any> {
+export class InBrowserSandboxSession implements SandboxSession<any> {
   state = { workspaceRootPath: MOUNT_PATH, environment: {}, exposedPorts: {}, workspaceReady: true };
   private _preStop: Array<() => Promise<void> | void> = [];
   constructor(private py: any) {}

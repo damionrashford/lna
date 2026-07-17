@@ -36,7 +36,7 @@ lna/
 │           │   ├── model/    model (provider-aware; resolveBrainModel) · browser-model (SDK Model over transformers.js OR web-llm) · transport (LocalAgentTransport + HITL loop)
 │           │   ├── context/  run-context (AutomoContext) · compact · trim · guardrails · profile (local personalization)
 │           │   └── autonomy/ tasks (durable IndexedDB queue; MCP Task projection) · loop (tick reducer) · scheduler (precise timer + SW drain) · critic (output guardrail) · loopguard · cron · repair (JSON) · current (running-task id)
-│           ├── sandbox/      index (BrowserSandboxClient — bridge RPC) · persist · roots · inbrowser/ (InBrowserSandboxClient: pyodide · fs · git · client — bridge-less)
+│           ├── sandbox/      index (BrowserSandboxClient — bridge RPC) · persist · roots · inbrowser/ (InBrowserSandboxClient: pyodide · fs · git · client — bridge-less; worker-client + sandbox.worker run it off the main thread)
 │           ├── mcp/          index (instances) · server (SDK MCPServer; http + bridge-stdio + inpage transports; consumes MCP task status) · inpage (in-page stdio + built-in browser + automo-tasks servers) · shims/ (node:* browser shims)
 │           ├── voice/        session · transport (RealtimeSession over local STT→model→TTS) · asr (Whisper) · tts (Kokoro) · audio (mic+VAD+playback) · pcm · config
 │           ├── net/          index (LNA fetch · bridge probe · /hw) · handshake (HMAC)

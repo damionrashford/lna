@@ -28,8 +28,10 @@ export async function ensureSandbox() {
   if (sandboxSession) return sandboxSession;
   if (!(await acquireSandboxLock())) throw new Error("Another AUTOMO tab is driving the sandbox — use that tab, or close it and retry.");
   if (S.sandbox === "inbrowser") {
-    const { InBrowserSandboxClient } = await import("../sandbox/inbrowser/index");
-    sandboxClient = new InBrowserSandboxClient();
+    // worker-backed by default (Pyodide/exec/git off the main thread); falls back to the main thread inside
+    // create() when a worker is unavailable.
+    const { WorkerSandboxClient } = await import("../sandbox/inbrowser/index");
+    sandboxClient = new WorkerSandboxClient();
     setCap("bridge", "ok", "in-browser sandbox (Pyodide)");
   } else {
     sandboxClient = new BrowserSandboxClient("ws://127.0.0.1:7967/ws", S.bridgeToken);
