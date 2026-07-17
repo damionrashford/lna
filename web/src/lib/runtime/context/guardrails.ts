@@ -1,8 +1,7 @@
-// Guardrails — SDK input/output guardrails (agent-level) + tool guardrails (function tools).
-// All are gated on the Settings "guardrails" toggle (S.guardrails), so they no-op when off.
-// AUTOMO is local-first, so these focus on not leaking credentials: warn on pasted secrets,
-// block the final answer from echoing one, refuse to send secrets to web search, and redact
-// secrets out of tool results before the model sees them.
+// Guardrails — SDK agent-level input/output guardrails + tool guardrails (function tools), all gated on
+// the Settings "guardrails" toggle (S.guardrails) so they no-op when off. Intent is credential safety:
+// warn on pasted secrets, block the final answer from echoing one, refuse to send secrets to web search,
+// and redact secrets out of tool results before the model sees them.
 import {
   defineToolInputGuardrail, defineToolOutputGuardrail, ToolGuardrailFunctionOutputFactory,
   type InputGuardrail, type OutputGuardrail,
@@ -16,8 +15,8 @@ const hasSecret = (s: string) => SECRET_RE.test(s);
 const redact = (s: string) => s.replace(new RegExp(SECRET_RE, "g"), "«redacted-credential»");
 const textOf = (x: any) => (typeof x === "string" ? x : JSON.stringify(x ?? ""));
 
-// read the guardrails toggle from the run's AutomoContext (single source of truth), falling back to
-// the live S setting if a run somehow provided no context.
+// Read the guardrails toggle from the run's AutomoContext, falling back to the live S setting if a run
+// provided no context.
 const guardrailsOn = (context: any) => context?.context?.settings?.guardrails ?? S.guardrails;
 
 // ---- agent-level ----

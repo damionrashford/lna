@@ -1,9 +1,9 @@
-// Browser TTS — Kokoro via kokoro-js (ONNX in the browser on WebGPU). Ported from voice-box/src/tts/
-// kokoro.ts; the ONE change is device "cpu" (onnxruntime-node) → "webgpu" (browser). Streaming, sentence-
-// by-sentence synthesis so the first audio plays while the model is still generating (low latency).
+// Browser TTS — Kokoro via kokoro-js (ONNX, WebGPU with WASM fallback). Streaming, sentence-by-sentence
+// synthesis so the first audio plays while the model is still generating (low latency). Emits 24 kHz
+// Int16 mono to the transport's onPcm.
 //
-// kokoro-js is a runtime-resolved dynamic import (variable specifier) so this bundles WITHOUT the dep;
-// add `kokoro-js` to actually synthesize. Emits 24 kHz Int16 mono to the transport's onPcm.
+// kokoro-js is a runtime-resolved dynamic import (variable specifier) so this bundles without the dep;
+// it must be installed to synthesize.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { floatToPcm16 } from "./pcm";
 

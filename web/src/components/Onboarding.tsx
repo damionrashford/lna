@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useStore, setOnboarding, setProfileName } from "../store";
 import { getProfile, saveProfile, type Tone } from "../lib/runtime/context/profile";
 
-// Warm, NON-BLOCKING first-run welcome. Skippable at every step (Skip / Esc / backdrop) — it personalizes
-// AUTOMO but never gates it. Captures a name, a focus, and a preferred tone, all optional.
+// Non-blocking first-run welcome: skippable at every step (Skip / Esc / backdrop), never gates the app.
+// Captures an optional name, focus, and tone.
 const FOCUS = ["Coding", "Writing", "Research", "Ops & automation", "Just exploring"];
 const TONES: { key: Tone; label: string; blurb: string }[] = [
   { key: "warm", label: "Warm", blurb: "friendly and encouraging" },

@@ -1,9 +1,9 @@
-// Observability — turn the Agents SDK's tracing into something useful locally. The SDK emits a structured
-// span tree for every run (agent → generation → tool/function → guardrail); by default it tries to export
-// those to OpenAI's hosted backend (a key we don't have), so they're otherwise dark. We REPLACE the
-// default processor with a local one: buffer each trace's spans, then render them with the console
-// group/table API and mirror a one-line summary into the debug panel. Global — chat and autonomous runs
-// alike. Rich console output only when the debug panel is open, so a normal session stays quiet.
+// Observability — route the Agents SDK's tracing to a local processor. The SDK emits a structured span
+// tree per run (agent → generation → tool/function → guardrail) and by default exports it to OpenAI's
+// hosted backend, which requires a key this app has no reason to hold. The default processor is replaced
+// with a local one: buffer each trace's spans, render them via the console group/table API, and mirror a
+// one-line summary into the debug panel. Rich console output only fires when the debug panel is open, so
+// a normal session stays quiet.
 import { setTraceProcessors } from "@openai/agents";
 import { getState, logEvent } from "../../../store";
 
@@ -41,7 +41,7 @@ export function installObservability() {
         const total = buf.rows.reduce((n, r) => n + (typeof r.ms === "number" ? r.ms : 0), 0);
         const errs = buf.rows.filter((r) => r.error).length;
         logEvent(errs ? "warn" : "info", `trace "${buf.name}" — ${buf.rows.length} spans · ${total}ms${errs ? ` · ${errs} error(s)` : ""}`);
-        // rich, structured console output — collapsed group + a table of spans — only while debugging
+        // Structured console output only while the debug panel is open.
         if (getState().debugOpen && typeof console.groupCollapsed === "function") {
           console.groupCollapsed(`%cAUTOMO%c ${buf.name}  %c${total}ms`, BADGE, "", "color:#888");
           console.table(buf.rows);

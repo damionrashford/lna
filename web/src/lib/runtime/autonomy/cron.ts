@@ -1,7 +1,7 @@
 // Recurrence math for the task queue. The scheduler fires one-shot tasks off their runAfter timestamp;
-// this adds repeating schedules by computing the NEXT runAfter from a cron expression. cron-schedule is a
-// zero-dependency parser — we use only its next-date calculator and keep our own durable IndexedDB queue
-// (its bundled schedulers are in-memory and wouldn't survive a reload). One import site for the dep.
+// this computes the next runAfter from a cron expression for repeating schedules. Only cron-schedule's
+// next-date calculator is used — its bundled in-memory schedulers wouldn't survive a reload, so the
+// durable IndexedDB queue stays authoritative. Single import site for the dependency.
 import { parseCronExpression } from "cron-schedule";
 
 export function isValidCron(expr: string): boolean {

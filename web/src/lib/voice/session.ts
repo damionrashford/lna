@@ -1,9 +1,9 @@
 // Voice session — wires the RealtimeSession over the local transport, the browser mic/playback, and the
-// chat thread. RealtimeSession keeps owning history/tools/guardrails; our LocalRealtimeTransport drives
-// turns through the SAME provider-aware SDK model as the text agent, and the mic/VAD (audio.ts) feeds it.
+// chat thread. RealtimeSession owns history/tools/guardrails; LocalRealtimeTransport drives turns
+// through the same provider-aware SDK model as the text agent, and the mic/VAD (audio.ts) feeds it.
 //
-// Lifecycle: startVoice() → getUserMedia + connect + capture; stopVoice() tears it all down. Barge-in is
-// automatic — a fresh utterance interrupts the in-flight turn (transport.interrupt → audio.stopPlayback).
+// Lifecycle: startVoice() -> getUserMedia + connect + capture; stopVoice() tears it down. Barge-in is
+// automatic: a fresh utterance interrupts the in-flight turn (transport.interrupt -> audio.stopPlayback).
 import { RealtimeAgent, RealtimeSession } from "@openai/agents-realtime";
 import { S, pushThread, patchThread, logEvent, setVoice } from "../../store";
 import { webSearchTool } from "../tools/search";
@@ -45,7 +45,7 @@ export async function startVoice(): Promise<void> {
     session.on("history_added", (item: any) => bridgeItem(item));
     (session as any).on?.("error", (e: any) => logEvent("error", "voice: " + (e?.error?.message ?? String(e?.error ?? e))));
 
-    await session.connect({ apiKey: "local" }); // apiKey is required by the type; our transport ignores it
+    await session.connect({ apiKey: "local" }); // apiKey is required by the type; the transport ignores it
 
     audio = new VoiceAudio(cfg);
     await audio.startCapture((pcm16k) => {

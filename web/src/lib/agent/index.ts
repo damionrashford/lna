@@ -1,6 +1,6 @@
-// AUTOMO's brain (public surface). Owns the live sandbox lifecycle, multi-conversation sessions
-// (persisted as AI SDK UIMessages), workspace snapshots, composer state, and boot. Model building and
-// connection live in ./build and ./connect (re-exported here so `from "./agent"` stays the entry point).
+// Public surface for the agent module: sandbox lifecycle, multi-conversation sessions (persisted as
+// AI SDK UIMessages), workspace snapshots, composer state, and boot. Model building and connection live
+// in ./build and ./connect, re-exported here so `from "./agent"` is the single entry point.
 import { Manifest, gitRepo } from "@openai/agents/sandbox";
 import { S, set, getState, setStatus, setMachine, setCap } from "../../store";
 import { detectHardware, recommendModel, recommendFromBridge, bridgeSummary } from "@automo/inference";
@@ -20,8 +20,8 @@ export * from "./connect";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type UIMessage = any;
 
-// the live sandbox for the current conversation — one workspace, reused across turns. Two backends:
-// the bridge (real Unix on the machine) or the in-browser Pyodide sandbox (zero-install, sandboxed).
+// Live sandbox for the current conversation — one workspace reused across turns. Two backends: the
+// bridge (native Unix on the machine) or the in-browser Pyodide sandbox.
 let sandboxClient: any = null;
 let sandboxSession: any = null;
 export async function ensureSandbox() {
@@ -35,14 +35,14 @@ export async function ensureSandbox() {
     sandboxClient = new BrowserSandboxClient("ws://127.0.0.1:7967/ws", S.bridgeToken);
   }
   sandboxSession = await sandboxClient.create(new Manifest({ entries: {} }));
-  const sid = getState().sessionId; // restore this conversation's durable workspace, if cached
+  const sid = getState().sessionId;
   if (sid) await hydrateWorkspaceFromCache(sid, sandboxSession);
-  if (getFsRoot()) startFolderObserver(sandboxSession); // auto-import folder edits (Chromium only)
+  if (getFsRoot()) startFolderObserver(sandboxSession); // folder auto-import is Chromium-only
   setWorkspaceRoot(sandboxSession.state?.workspaceRootPath ?? null); // expose as an MCP root
   notifyRootsChanged();
   return sandboxSession;
 }
-// manual "pull the granted folder into the workspace" (folder → sandbox); returns files imported
+// Manually pull the granted folder into the workspace (folder → sandbox); returns files imported.
 export async function importActiveFolder(): Promise<number> {
   return sandboxSession ? importFromFolder(sandboxSession) : 0;
 }
@@ -56,8 +56,8 @@ export async function persistActiveWorkspace() {
 export async function resetSandbox() {
   const old = sandboxSession;
   sandboxSession = null; releaseSandboxLock(); stopFolderObserver();
-  // fire-and-forget: let memory generation (pre-stop hooks) flush to MEMORY.md in the background, then
-  // close — so switching/clearing a conversation stays instant even though the flush runs the model.
+  // Fire-and-forget: pre-stop hooks flush memory (MEMORY.md) in the background, then close, so
+  // switching/clearing a conversation stays instant even though the flush runs the model.
   if (old) void (async () => {
     try { await old.runPreStopHooks?.(); } catch { /* best-effort */ }
     try { await old.close?.(); } catch { /* noop */ }
@@ -128,7 +128,7 @@ export async function snapshotWorkspace(name: string, uiMessages: UIMessage[]) {
     loadSnaps();
   } catch (e: any) { set({ repoSt: "snapshot failed: " + (e?.message || e) }); }
 }
-// creates a fresh session, hydrates the workspace, and returns the snapshot's UIMessages for the chat layer
+// Creates a fresh session, hydrates the workspace, and returns the snapshot's UIMessages.
 export async function restoreSnapshot(name: string): Promise<UIMessage[] | null> {
   const snap = await idbGet<any>("snapshot:" + name); if (!snap) return null;
   await createSession();
@@ -156,19 +156,19 @@ export async function boot() {
   const { initPwa } = await import("../platform/pwa");
   setStatus("", "not connected");
   const { installObservability } = await import("../runtime/context/trace");
-  installObservability(); // SDK tracing → rich console + debug panel (chat + autonomous runs)
-  // local profile → show the warm first-run welcome once (non-blocking), mirror the name for the greeting
+  installObservability(); // SDK tracing → console + debug panel (chat and autonomous runs)
+  // First run: show the welcome once (non-blocking); mirror the profile name for the greeting.
   const { getProfile } = await import("../runtime/context/profile");
   const prof = getProfile();
   set({ onboarding: !prof.onboarded, profileName: prof.name });
   initWakeLock();
   initTabs();
   initPwa(); // Share Target / File Handlers / install prompt for the installed PWA
-  if (S.autonomous) { const { startScheduler } = await import("../runtime/autonomy/scheduler"); startScheduler(); } // opt-in autonomous mode
-  // detect the machine and recommend a model size (coarse browser APIs), then refine with the bridge's
-  // exact RAM/VRAM/chip if it's running — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box
-  // reads as 8GB until the bridge reports real numbers. Runs at idle (Background Tasks API) so it never
-  // blocks first paint; the `timeout` guarantees it still fires on a busy main thread.
+  if (S.autonomous) { const { startScheduler } = await import("../runtime/autonomy/scheduler"); startScheduler(); } // opt-in
+  // Recommend a model size from coarse browser APIs, then refine with the bridge's exact RAM/VRAM/chip
+  // if it's running: WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box reads as 8GB until the
+  // bridge reports real numbers. Runs at idle (Background Tasks API) so it never blocks first paint; the
+  // `timeout` guarantees it still fires on a busy main thread.
   const idle = (globalThis as any).requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 200));
   idle(() => {
     detectHardware().then(async (p) => {

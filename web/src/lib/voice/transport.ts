@@ -1,12 +1,10 @@
-// LocalRealtimeTransport — a fully-local `RealtimeTransportLayer` for @openai/agents-realtime, ported
-// from voice-box/src/transport/localTransport.ts. The event synthesis is framework-agnostic; the ONE
-// substantive change from the source is the brain: instead of a hand-rolled Ollama `streamTurn`, each
-// turn runs through resolveBrainModel() — the SAME provider-aware SDK Model the text agent uses (Ollama
-// shim / vLLM native / in-browser). STT/TTS are swapped for the browser ONNX engines (asr.ts / tts.ts).
+// LocalRealtimeTransport — a fully-local `RealtimeTransportLayer` for @openai/agents-realtime. Each turn
+// runs through resolveBrainModel() (the provider-aware SDK model the text agent uses); STT/TTS are the
+// browser ONNX engines (asr.ts / tts.ts).
 //
-// Per-turn emission contract (verified against agents-realtime, unchanged in 0.13.4):
-//   item_update(user) → turn_started → transcript_delta.. → audio.. → item_update(assistant)
-//   → audio_done → turn_done   (tool turns insert function_call and DEFER turn_done)
+// Per-turn emission contract required by agents-realtime:
+//   item_update(user) -> turn_started -> transcript_delta.. -> audio.. -> item_update(assistant)
+//   -> audio_done -> turn_done   (tool turns insert function_call and defer turn_done)
 import { EventEmitterDelegate } from "@openai/agents-core/utils";
 import { RuntimeEventEmitter } from "@openai/agents-core";
 import type {
@@ -37,8 +35,8 @@ function extractText(message: any): string {
 }
 
 export class LocalRealtimeTransport extends EventEmitterDelegate<RealtimeTransportEventTypes> implements RealtimeTransportLayer {
-  // cast: the node-shim RuntimeEventEmitter's key signature (string|symbol|number) is stricter than the
-  // delegate's abstract EventEmitter<EventTypes>; behaviourally identical, so satisfy the type by cast.
+  // The node-shim RuntimeEventEmitter's key signature (string|symbol|number) is stricter than the
+  // delegate's abstract EventEmitter<EventTypes>; behaviourally identical, so the type is satisfied by cast.
   protected eventEmitter = new RuntimeEventEmitter<RealtimeTransportEventTypes>() as any;
   status: "connected" | "disconnected" | "connecting" | "disconnecting" = "disconnected";
 
@@ -119,7 +117,7 @@ export class LocalRealtimeTransport extends EventEmitterDelegate<RealtimeTranspo
 
     let assistantText = ""; const outputItems: any[] = [];
     try {
-      const model = await resolveBrainModel(); // the same provider-aware model the text agent uses
+      const model = await resolveBrainModel();
       const stream = model.getStreamedResponse({
         systemInstructions: this.#instructions, input: this.#history, modelSettings: { temperature: this.#cfg.temperature, maxTokens: this.#cfg.maxTokens },
         tools: this.#tools, toolsExplicitlyProvided: true, outputType: "text" as any, handoffs: [], tracing: false, signal: ac.signal,

@@ -1,10 +1,8 @@
-// Browser voice config — the localStorage-backed knobs for the local voice stack (ASR/brain/TTS/VAD).
-// Replaces voice-box's Bun/env config. Sample rates are fixed by the backends: whisper wants 16 kHz in,
-// kokoro emits 24 kHz out.
+// Browser voice config for the local voice stack (ASR/brain/TTS/VAD). Sample rates are fixed by the
+// backends: whisper wants 16 kHz in, kokoro emits 24 kHz out.
 export interface VoiceConfig {
-  // NOTE: there is no "brain" here on purpose. Voice turns run through the SAME provider-aware SDK model
-  // the text agent uses (lib/model.ts → Ollama shim / vLLM native / BrowserModel). These are only the
-  // voice-specific generation knobs handed to that model per turn.
+  // No "brain" field by design: voice turns run through the same provider-aware SDK model the text
+  // agent uses. These are only the voice-specific generation knobs handed to that model per turn.
   temperature: number;
   maxTokens: number;      // short replies keep TTS latency low
 
@@ -18,14 +16,14 @@ export interface VoiceConfig {
   sttSampleRate: 16000;
   ttsSampleRate: 24000;
 
-  // energy VAD (RMS over int16), ported from voice-box defaults
+  // energy VAD thresholds (RMS over int16)
   vadStartRms: number;
   vadEndRms: number;
   vadSilenceMs: number;
   vadMinSpeechMs: number;
 }
 
-// Defaults grounded in the plan (whisper-base.en, Kokoro-82M q8, af_heart) + voice-box VAD tuning.
+// Defaults: whisper-base.en, Kokoro-82M q8, af_heart.
 export function loadVoiceConfig(over: Partial<VoiceConfig> = {}): VoiceConfig {
   return {
     temperature: 0.3,

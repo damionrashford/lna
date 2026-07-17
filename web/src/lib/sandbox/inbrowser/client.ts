@@ -1,9 +1,9 @@
-// InBrowserSandboxClient — a SECOND SandboxClient (the first is the bridge-backed one in ../index.ts)
-// that implements the SDK's SandboxClient/SandboxSession/Editor interfaces ENTIRELY in the browser:
+// InBrowserSandboxClient — a second SandboxClient (the first is the bridge-backed one in ../index.ts)
+// that implements the same SDK SandboxClient/SandboxSession/Editor interfaces entirely in the browser:
 //   exec/execCommand → just-bash over the Pyodide FS   filesystem CRUD → Emscripten FS + applyDiff (V4A)
 //   materializeEntry(gitRepo) → isomorphic-git clone    persist/hydrate → OPFS (durable) + a JSON archive
-// So AUTOMO's agent runs with NO bridge daemon — a "try instantly" mode. Weaker than the bridge (just-bash
-// is a JS bash, Pyodide is sandboxed, no native binaries, no real host files), but zero-install and safe.
+// This runs the agent with no bridge daemon. Weaker than the bridge (just-bash is a JS bash, Pyodide is
+// sandboxed, no native binaries, no real host files), but zero-install.
 import type { SandboxClient, SandboxSession } from "@openai/agents/sandbox";
 import { applyDiff } from "@openai/agents-core";
 import { bootPyodide, persist, runUserCode, MOUNT_PATH } from "./pyodide";
@@ -84,7 +84,7 @@ class InBrowserSandboxSession implements SandboxSession<any> {
     } as any;
   };
 
-  // OPFS already persists the workspace across reloads; persist/hydrate additionally support the SDK's
+  // OPFS already persists the workspace across reloads; persist/hydrate additionally back the SDK's
   // snapshot feature as a gzip'd JSON archive {path: base64} of the whole tree.
   persistWorkspace = async (): Promise<Uint8Array> => {
     const fs = makePyodideFs(this.py);
@@ -102,7 +102,7 @@ class InBrowserSandboxSession implements SandboxSession<any> {
   registerPreStopHook = (h: () => Promise<void> | void) => { this._preStop.push(h); return () => { this._preStop = this._preStop.filter((x) => x !== h); }; };
   runPreStopHooks = async () => { for (const h of this._preStop) { try { await h(); } catch { /* best-effort flush */ } } };
   close = async () => { await persist(); };
-  // bonus surface (not on the SDK interface): a run_python tool can call this
+  // Not part of the SDK interface: a run_python tool can call this directly.
   runPython = (code: string) => runUserCode(code);
 }
 
@@ -117,7 +117,7 @@ export class InBrowserSandboxClient implements SandboxClient<any, any> {
   };
 }
 
-// gzip helpers via the native CompressionStream (same approach as sandbox/persist.ts)
+// gzip helpers via the native CompressionStream (same approach as sandbox/persist.ts).
 async function gzip(u8: Uint8Array): Promise<Uint8Array> {
   const cs = new (globalThis as any).CompressionStream("gzip");
   return new Uint8Array(await new Response(new Blob([u8 as any]).stream().pipeThrough(cs)).arrayBuffer());

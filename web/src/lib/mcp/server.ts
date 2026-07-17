@@ -1,14 +1,12 @@
-// Real MCP client for the browser, built the SAME SHAPE as the SDK's browser MCPServer classes —
-// which are stubs that `throw new Error('Method not implemented.')` — but actually implemented. Each
-// instance satisfies @openai/agents' `MCPServer` interface, so it plugs straight into
-// SandboxAgent.mcpServers and the SDK owns tool exposure, server-prefixed names, tool filtering,
-// _meta, structuredContent, and errorFunction. Two transports:
-//   - Streamable HTTP: the raw MCP SDK StreamableHTTPClientTransport (fetch-based; LNA-hinted fetch).
-//   - stdio: a custom Transport that pipes over our loopback bridge WebSocket — a browser can't spawn
-//     a process, so the bridge spawns it and pipes stdio (the same spawn/stdin/stdout protocol we
-//     already speak). This is why stdio can't use the SDK's local-spawn class.
+// Browser-side MCP client that implements @openai/agents' MCPServer interface. The SDK's own browser
+// MCPServer classes are stubs that throw 'Method not implemented.', so this reimplements them; each
+// instance plugs straight into SandboxAgent.mcpServers and the SDK owns tool exposure, server-prefixed
+// names, tool filtering, _meta, structuredContent, and errorFunction. Two transports:
+//   - Streamable HTTP: the MCP SDK's StreamableHTTPClientTransport (fetch-based, LNA-hinted fetch).
+//   - stdio: a custom Transport over the loopback bridge WebSocket. A browser can't spawn a process, so
+//     the bridge spawns it and pipes stdio; that's why stdio can't use the SDK's local-spawn class.
 // Elicitation (server→client structured-input requests) is answered via the Client's request handler,
-// routed to our human-in-the-loop surface — the same idea as SDK tool approvals.
+// routed to the human-in-the-loop surface.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ElicitRequestSchema, ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -23,7 +21,7 @@ import { appendEvent, updateTask as updateAutonomyTask } from "../runtime/autono
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// MCP Transport (start/send/close/onmessage/onclose/onerror) over the LNA bridge's stdio pipe.
+// MCP Transport over the LNA bridge's stdio pipe.
 class BridgeStdioTransport {
   onmessage?: (m: any) => void;
   onclose?: () => void;
@@ -85,7 +83,7 @@ export interface McpServerConfig {
   headers?: Record<string, string>;
 }
 
-// One class satisfying the SDK's MCPServer interface, backed by a real MCP Client.
+// Implements the SDK's MCPServer interface, backed by an MCP Client.
 export class SdkMcpServer {
   name: string;
   cacheToolsList = true;
@@ -99,11 +97,10 @@ export class SdkMcpServer {
       { name: "automo", version: "1" },
       { capabilities: { elicitation: {}, roots: { listChanged: true }, tasks: { list: {}, cancel: {} } } },
     );
-    // answer server→client input requests instead of dropping them (which would hang the server).
-    // Cast: the runtime shape {action, content} is a valid MCP ElicitResult; the SDK's handler return
-    // union is over-constrained (it also allows task-augmented results we don't produce).
+    // Answer server→client input requests; an unanswered request hangs the server. The cast satisfies
+    // the SDK's over-constrained handler return union ({action, content} is a valid MCP ElicitResult).
     client.setRequestHandler(ElicitRequestSchema, ((req: any) => requestElicitation(this.name, req.params)) as any);
-    // expose our filesystem roots (the sandbox workspace) so servers know where they may operate
+    // Expose the filesystem roots (sandbox workspace) so servers know where they may operate.
     client.setRequestHandler(ListRootsRequestSchema, (async () => ({ roots: currentRoots() })) as any);
     await client.connect(this.makeTransport());
     this.client = client;
@@ -112,7 +109,7 @@ export class SdkMcpServer {
   }
   async listTools(): Promise<any[]> { return this.tools; }
 
-  // tell the server our roots changed (new sandbox workspace); best-effort
+  // Tell the server the roots changed (new sandbox workspace); best-effort.
   async notifyRootsChanged(): Promise<void> {
     try { await (this.client as any)?.sendRootsListChanged?.(); } catch { /* server may not support roots */ }
   }
@@ -120,12 +117,12 @@ export class SdkMcpServer {
   async callTool(toolName: string, args: Record<string, unknown> | null): Promise<any> {
     const tool = this.tools.find((t) => t.name === toolName);
     const taskSupport = tool?.execution?.taskSupport;
-    // Long-running tools: run as a task and poll to completion via the SDK's task stream, surfacing
-    // status to the UI, then return the final result — background processing without blocking.
+    // Long-running tools run as a task, polled to completion via the SDK's task stream so status
+    // surfaces to the UI without blocking, then the final result is returned.
     if (taskSupport === "required" || taskSupport === "optional") {
-      // If an autonomous task triggered this call, mirror the MCP Task's status stream into that durable
-      // task's event log + note — the related-task link, in reverse: a long-running MCP tool's progress
-      // becomes visible on the autonomy task that's awaiting it. No-op during interactive chat (id null).
+      // If an autonomous task triggered this call, mirror the MCP Task's status stream into that
+      // durable task's event log and note, so a long-running MCP tool's progress is visible on the
+      // autonomy task awaiting it. No-op during interactive chat (autoId null).
       const autoId = getCurrentTaskId();
       const mirror = (status: string) => { if (autoId) { void appendEvent(autoId, "tool", `${this.name}/${toolName}: ${status}`); void updateAutonomyTask(autoId, { note: `mcp ${toolName}: ${status}` }); } };
       const stream = (this.client as any).experimental.tasks.callToolStream({ name: toolName, arguments: (args || {}) as any });
@@ -160,7 +157,7 @@ export function makeMcpServer(cfg: McpServerConfig): SdkMcpServer {
       } as any));
   }
   if (cfg.transport === "inpage") {
-    // PURE-BROWSER path — a bundled stdio MCP server runs in the page over shimmed process stdio.
+    // Bridge-less path: a bundled stdio MCP server runs in the page over shimmed process stdio.
     return new SdkMcpServer(cfg, () => new InPageStdioTransport(cfg.server || cfg.label));
   }
   return new SdkMcpServer(cfg, () =>

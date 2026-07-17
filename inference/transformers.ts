@@ -3,9 +3,9 @@
 // Hub tagged `library=transformers.js`; quantization via `dtype` (q4 / q4f16 / q8 / fp16). Zero server,
 // weights fetched from the Hub and cached in the browser Cache API. Streams tokens via TextStreamer.
 //
-// The heavy WASM dep is imported lazily via a runtime-resolved specifier so this module bundles WITHOUT
-// `@huggingface/transformers` installed; add it to actually run the engine. API is grounded in the
-// transformers.js v3 docs (pipeline text-generation, device:"webgpu", dtype, TextStreamer).
+// The heavy WASM dep is imported lazily via a runtime-resolved specifier so this module bundles without
+// `@huggingface/transformers` installed; add it to run the engine. Uses the transformers.js v3 API
+// (pipeline text-generation, device:"webgpu", dtype, TextStreamer).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface BrowserEngine {
   model: string;
@@ -14,7 +14,7 @@ export interface BrowserEngine {
 }
 
 export async function createBrowserEngine(model: string, dtype = "q4f16"): Promise<BrowserEngine> {
-  // literal specifier so Bun BUNDLES it when installed; build.ts externalizes it when it's absent
+  // literal specifier so Bun bundles it when installed; build.ts externalizes it when absent
   const tf: any = await import("@huggingface/transformers").catch(() => {
     throw new Error("In-browser engine needs `@huggingface/transformers` — add it to run models on WebGPU/WASM.");
   });

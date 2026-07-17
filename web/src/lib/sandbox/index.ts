@@ -1,14 +1,14 @@
-// BrowserSandboxClient — the browser side of AUTOMO's sandbox. It implements the SDK's
-// SandboxClient/SandboxSession/Editor interfaces by RPC'ing every call to the LNA bridge,
-// which hosts the REAL UnixLocalSandboxClient. So the in-browser @openai/agents SandboxAgent
-// drives a genuine Unix sandbox on the user's machine over Local Network Access.
+// BrowserSandboxClient — the browser side of the sandbox. It implements the SDK's
+// SandboxClient/SandboxSession/Editor interfaces by RPC'ing every call to the LNA bridge, which hosts
+// the real UnixLocalSandboxClient, so the in-browser @openai/agents SandboxAgent drives a genuine Unix
+// sandbox on the user's machine over Local Network Access.
 import type { SandboxClient, SandboxSession } from "@openai/agents/sandbox";
 import { authFrame } from "../net/handshake";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const b64ToU8 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-// chunked: String.fromCharCode(...u) overflows the argument limit (RangeError) past ~100k bytes,
-// and readFile / persistWorkspace routinely carry megabytes.
+// Chunked: String.fromCharCode(...u) overflows the argument limit (RangeError) past ~100k bytes, and
+// readFile / persistWorkspace routinely carry megabytes.
 export const u8ToB64 = (u: Uint8Array) => {
   let s = "";
   for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000) as unknown as number[]);
@@ -24,7 +24,7 @@ function serializeManifest(m: any) {
 
 const RPC_TIMEOUT_MS = 120000;
 
-// one WS to the bridge, request/response correlated by id
+// One WebSocket to the bridge; request/response correlated by id.
 class BridgeRPC {
   private ws: WebSocket | null = null;
   private ready: Promise<void> | null = null;
@@ -41,18 +41,18 @@ class BridgeRPC {
       this.ws = ws;
       ws.onmessage = async (e) => {
         const m = JSON.parse(e.data);
-        if (m.type === "hello") { ws.send(await authFrame(this.token, m.nonce)); return; } // answer the nonce challenge
+        if (m.type === "hello") { ws.send(await authFrame(this.token, m.nonce)); return; } // answer nonce challenge
         if (m.type === "auth") { m.ok ? resolve() : reject(new Error("bridge auth failed")); return; }
         if (m.type === "sb") { const p = this.pending.get(m.id); if (p) { this.pending.delete(m.id); m.ok ? p.res(m.result) : p.rej(new Error(m.error)); } }
       };
-      ws.onopen = () => {}; // auth is sent in reply to the bridge's hello (nonce challenge)
+      ws.onopen = () => {}; // auth is sent in reply to the bridge's hello, not on open
       ws.onerror = () => reject(new Error("bridge not reachable — start it: bun run bridge"));
       ws.onclose = () => { this.ready = null; this.ws = null; this.closed.abort(); };
     });
     return this.ready;
   }
 
-  // Each RPC settles on the bridge reply, a per-call timeout, or the socket dropping — composed with
+  // Each RPC settles on the bridge reply, a per-call timeout, or the socket dropping, composed with
   // AbortSignal.any so a closed connection cancels every pending call at once (no leaked promises).
   async rpc(op: string, extra: Record<string, any> = {}): Promise<any> {
     await this.connect();
@@ -90,9 +90,9 @@ class BrowserSandboxSession implements SandboxSession<any> {
     const call = (operation: any) => this.rpc.rpc("editorApply", { sid: this.sid, runAs, operation });
     return { createFile: call, updateFile: call, deleteFile: call } as any;
   }
-  // pre-stop hooks — the memory() capability registers a flush hook here; without these methods the
-  // SDK could never fire memory generation (Phase 1/2 that build MEMORY.md). runPreStopHooks() must be
-  // invoked (by us, on session reset) while the session is still open so the flush can RPC the bridge.
+  // Pre-stop hooks — the memory() capability registers a flush hook here; without these methods the
+  // SDK could never fire memory generation (the phases that build MEMORY.md). runPreStopHooks() must
+  // run (on session reset) while the session is still open so the flush can RPC the bridge.
   private _preStop: Array<() => Promise<void> | void> = [];
   registerPreStopHook = (hook: () => Promise<void> | void) => {
     this._preStop.push(hook);

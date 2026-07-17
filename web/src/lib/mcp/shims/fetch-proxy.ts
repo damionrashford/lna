@@ -1,7 +1,6 @@
-// Routes a bundled in-page server's CROSS-ORIGIN fetches through a CORS proxy so it can read responses
-// from hosts that don't send CORS (e.g. shopify.dev). Same-origin passes through untouched. Proxy is
-// configurable via globalThis.__corsProxy. Ported from gh-pages-react/shims. IMPORT THIS ONLY when a
-// server needs it — it patches the global fetch.
+// Routes a bundled in-page server's cross-origin fetches through a CORS proxy so it can read responses
+// from hosts that don't send CORS headers. Same-origin passes through untouched; proxy is configurable
+// via globalThis.__corsProxy. Import only when a server needs it — it patches the global fetch.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const orig = globalThis.fetch.bind(globalThis);
 const PROXY = (globalThis as any).__corsProxy ?? "https://corsproxy.io/?url=";

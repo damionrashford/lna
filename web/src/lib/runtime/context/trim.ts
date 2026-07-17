@@ -1,9 +1,7 @@
-// Tool-output trimmer — the highest-ROI context lever for a small local model. Bloated tool results
-// (search dumps, file reads, long shell output) are the #1 cause of a small context window blowing out.
-// This is a model-input filter that runs right before every model call: it protects the most recent
-// turns verbatim and replaces OLDER, oversized tool outputs with a short head preview + a labelled note,
-// so the causal thread survives while the token weight collapses. Independent of the autonomous loop —
-// it helps every turn, reactive or autonomous.
+// Tool-output trimmer — a model-input filter that runs before every model call. Bloated tool results
+// (search dumps, file reads, long shell output) are the main cause of a small context window overflowing,
+// so this protects the most recent turns verbatim and replaces older, oversized tool outputs with a short
+// head preview plus a labelled note: the causal thread survives while token weight drops.
 import type { CallModelInputFilter } from "@openai/agents";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

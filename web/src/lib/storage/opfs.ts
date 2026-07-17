@@ -1,5 +1,5 @@
-// File tools: File System Access (a granted folder = local-bind mount) + OPFS (private memory).
-// The FSA permission/iterator APIs aren't all in lib.dom yet, so a few casts to `any`.
+// File tools: File System Access (a granted folder acts as a local-bind mount) + OPFS (private memory).
+// The FSA permission/iterator APIs aren't all in lib.dom yet, hence the casts to `any`.
 import { idbGet, idbSet } from "./idb";
 import { setCap, set } from "../../store";
 
@@ -53,7 +53,7 @@ export async function opfsReadFile(path: string): Promise<string> {
   return await (await (await dir.getFileHandle(file)).getFile()).text();
 }
 
-// mirror OPFS memory into the granted folder (.automo/memory/) so it's durable + visible on disk
+// Mirror OPFS memory into the granted folder (.automo/memory/) so it's durable and visible on disk.
 export async function mirrorMem(path: string, content: string) {
   if (!fsRoot) return;
   try {

@@ -1,7 +1,6 @@
-// Pyodide singleton for the in-browser sandbox — real Python + a persistent OPFS filesystem at /persist,
-// the SAME FS just-bash and isomorphic-git operate on. Ported from gh-pages-react/src/pyodide.ts. Loaded
-// from the pinned jsDelivr CDN via a variable-specifier dynamic import, so nothing bundles until the
-// in-browser sandbox is actually selected.
+// Pyodide singleton for the in-browser sandbox — real Python plus a persistent OPFS filesystem at
+// /persist, the same FS just-bash and isomorphic-git operate on. Loaded from the pinned jsDelivr CDN
+// via a variable-specifier dynamic import, so nothing bundles until the in-browser sandbox is selected.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const PYODIDE_VERSION = "v0.28.3";
 const CDN = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;

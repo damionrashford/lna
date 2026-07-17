@@ -1,5 +1,5 @@
-// Debug panel — a live view of the run log (context.log / logEvent ring buffer) and the last turn's
-// token usage (RunContext.usage). Toggled from the Header. Inline-styled so it needs no extra CSS.
+// Debug panel: live view of the run-log ring buffer and the last turn's token usage.
+// Inline-styled so it needs no extra CSS.
 import { useStore, set } from "../store";
 
 const box: React.CSSProperties = {

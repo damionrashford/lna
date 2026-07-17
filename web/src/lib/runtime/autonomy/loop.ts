@@ -1,11 +1,8 @@
-// The outer autonomous loop — a reducer, not a daemon. `tick(now)` is one idempotent step: if this tab
-// is the leader and a task is due, run it to completion (or blocked/failed) through the SAME provider,
-// agent, and sandbox the chat uses. Safe to call from any trigger (timer, visibility, scheduler); one
-// task per tick so it never hogs the main thread. The SDK's run() is the INNER (ReAct) loop — we wrap
-// it, we don't rebuild it.
-//
-// This slice does dequeue → run → done/blocked/failed(+backoff retry). Follow-up slices add the critic
-// gate, loop-guard, RunState persist/resume, and the until-dry / no-progress stop conditions.
+// The outer autonomous loop, structured as a reducer rather than a daemon. `tick(now)` is one
+// idempotent step: if this tab is the leader and a task is due, run it to completion (or blocked/failed)
+// through the same provider, agent, and sandbox the chat uses. Safe to call from any trigger (timer,
+// visibility, scheduler); one task per tick so it never hogs the main thread. The SDK's run() is the
+// inner (ReAct) loop, wrapped here rather than reimplemented.
 import { run, RunState, OutputGuardrailTripwireTriggered } from "@openai/agents";
 import { S, getState, logEvent } from "../../../store";
 import { runAsLeader } from "../../platform/locks";
@@ -37,7 +34,6 @@ export async function tick(at = Date.now()): Promise<"ran" | "idle" | "not-leade
   } finally { ticking = false; }
 }
 
-// A fresh task run: input is the task prompt.
 async function runTask(task: Task): Promise<void> {
   await updateTask(task.id, { status: "working" });
   await appendEvent(task.id, "run", task.prompt.slice(0, 160));
@@ -46,7 +42,7 @@ async function runTask(task: Task): Promise<void> {
 
 // Resume a task that blocked on a tool approval. The serialized RunState was persisted at block time, so
 // this rehydrates the exact in-flight run, applies the human decision to every pending approval, and
-// continues from where it stopped — no work is redone. `approve=false` rejects the calls instead.
+// continues from where it stopped without redoing work. `approve=false` rejects the calls instead.
 export async function resumeTask(taskId: string, approve: boolean): Promise<void> {
   const task = (await getTasks()).find((t) => t.id === taskId);
   if (!task || task.status !== "input_required") return;
@@ -61,10 +57,11 @@ export async function resumeTask(taskId: string, approve: boolean): Promise<void
   await executeRun(task, state);
 }
 
-// The shared run → outcome path. `input` is either a prompt (fresh) or a RunState (resume). Handles the
-// interruption-persist, loop-guard, critic tripwire, done, and error-retry outcomes identically for both.
+// The shared run → outcome path. `input` is either a prompt (fresh) or a RunState (resume), and the
+// interruption-persist, loop-guard, critic-tripwire, done, and error-retry outcomes are handled the
+// same for both.
 async function executeRun(task: Task, input: string | RunState<any, any>): Promise<void> {
-  setCurrentTaskId(task.id); // so a task-augmented MCP tool call can attribute progress back to this task
+  setCurrentTaskId(task.id); // lets a task-augmented MCP tool call attribute progress back to this task
   try {
     const model = S.model;
     installModelProvider(model);
@@ -75,14 +72,14 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
       context: buildContext(session, getState().sessionId),
       maxTurns: task.budget.turns,
       callModelInputFilter: toolOutputTrimmer(),
-      // Critic gate as a per-RUN output guardrail: it judges the final output against this task's goal and
-      // trips a tripwire (caught below → retry) when the goal isn't met. Run-level, not agent-level, so it
-      // only governs autonomous tasks — interactive chat replies are never gated on goal-completion.
+      // Critic gate as a per-run output guardrail: judges the final output against this task's goal and
+      // trips a tripwire (caught below → retry) when the goal isn't met. Run-level, not agent-level, so
+      // it only governs autonomous tasks; interactive chat replies are never gated on goal-completion.
       outputGuardrails: [criticGuardrail(task.prompt)],
     } as any);
 
     if (result.interruptions?.length) {
-      // a high-stakes tool needs approval — persist the exact RunState so resumeTask() can continue it
+      // A high-stakes tool needs approval: persist the exact RunState so resumeTask() can continue it
       // after a human decision (survives reload), then park the task.
       await saveThread(task.id, result.state.toString());
       await updateTask(task.id, { status: "input_required", note: "awaiting approval" });
@@ -91,9 +88,9 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
     }
     const out = typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
 
-    // Loop-guard: if this task keeps producing the same output across attempts, it's stuck — fail it fast
-    // instead of burning the remaining retry budget on identical work. Skipped for recurring tasks, where
-    // identical output across occurrences (e.g. a daily "all clear" check) is expected, not a stuck loop.
+    // Loop-guard: a task that keeps producing the same output across attempts is stuck; fail it fast
+    // instead of burning the remaining retry budget on identical work. Skipped for recurring tasks,
+    // where identical output across occurrences (e.g. a daily "all clear" check) is expected.
     if (!task.cron && isLooping(task.id, out)) {
       await updateTask(task.id, { status: "failed", note: "loop detected: identical result repeated" });
       await appendEvent(task.id, "stop", "failed: looping");
@@ -103,7 +100,7 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
 
     clearLoopGuard(task.id);
     await appendEvent(task.id, "critic", "pass");
-    // Recurring task: re-arm to the next fire instead of terminating. One durable record keeps repeating.
+    // Recurring task: re-arm to the next fire instead of terminating; one durable record keeps repeating.
     if (task.cron) {
       const next = nextCronRun(task.cron);
       if (next) {
@@ -134,8 +131,8 @@ async function executeRun(task: Task, input: string | RunState<any, any>): Promi
     const msg = e?.message ?? String(e);
     await appendEvent(task.id, "error", msg);
     const attempts = task.attempts + 1;
-    // replay-safety: once a turn fired a side-effecting tool we don't blind-retry (a later slice tracks
-    // this precisely); for now a plain backoff retry, then give up.
+    // replay-safety: a turn that fired a side-effecting tool ideally shouldn't be blind-retried (tracked
+    // via task.replaySafe). Current path is a plain backoff retry, then give up.
     if (attempts < task.maxAttempts) {
       await updateTask(task.id, { status: "pending", attempts, runAfter: Date.now() + backoff(attempts), note: "retry: " + msg.slice(0, 80) });
     } else {

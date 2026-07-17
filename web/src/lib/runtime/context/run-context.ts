@@ -1,14 +1,14 @@
-// AutomoContext — the app-local RunContext<T> for a single agent run, threaded through EVERY tool,
-// tool/agent guardrail, hook, and the dynamic instructions (all of which the SDK hands a
-// RunContext<AutomoContext>). It is the one source of run-scoped truth, replacing scattered reads of
-// module globals (the `S` settings object, the folder handle, the mcp registry).
+// AutomoContext — the app-local RunContext<T> for a single agent run, threaded through every tool,
+// tool/agent guardrail, hook, and the dynamic instructions (all handed a RunContext<AutomoContext> by
+// the SDK). Single source of run-scoped truth, replacing scattered reads of module globals (the `S`
+// settings object, the folder handle, the mcp registry).
 //
-// Two hard rules from the SDK's context model:
-//   1. NOT sent to the LLM. Only `instructions` + `input` reach the model — so anything here that the
-//      model should see must be surfaced through buildInstructions(), not assumed visible.
-//   2. NOT serialized into RunState (we resume from result.state and re-pass context each run()). So it
-//      may hold LIVE HANDLES (the sandbox session) but MUST NOT hold SECRETS — the bridge token stays
-//      in settings/localStorage and is used only at connect time, never parked in context.
+// Two invariants from the SDK's context model:
+//   1. Not sent to the LLM — only `instructions` + `input` reach the model, so anything the model should
+//      see must be surfaced through buildInstructions(), not assumed visible.
+//   2. Not serialized into RunState (runs resume from result.state and re-pass context each run()). So it
+//      may hold live handles (the sandbox session) but must not hold secrets — the bridge token stays in
+//      settings/localStorage and is used only at connect time, never parked in context.
 import type { SandboxSession } from "@openai/agents/sandbox";
 import { S, logEvent } from "../../../store";
 import { getFsRoot } from "../../storage/opfs";

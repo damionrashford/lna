@@ -1,7 +1,6 @@
-// MCP management. Builds real MCP client instances (mcp-server.ts) and hands the connected ones to
-// the SandboxAgent via Agent.mcpServers — the SDK then owns tool exposure, server-prefixed names,
-// filtering, _meta, and structuredContent. Config (label/transport/url/cmd/auth) persists to
-// localStorage for the Settings UI; the instances are live.
+// MCP server management. Builds MCP client instances and hands the connected ones to the SandboxAgent
+// via Agent.mcpServers, so the SDK owns tool exposure, server-prefixed names, filtering, _meta, and
+// structuredContent. Config persists to localStorage; the instances themselves are live.
 import { set } from "../../store";
 import { makeMcpServer, type SdkMcpServer, type McpServerConfig } from "./server";
 
@@ -19,11 +18,11 @@ export function syncMcpView() {
   set({ mcpView: entries.map((e) => ({ label: e.cfg.label, transport: e.cfg.transport, connected: e.connected, error: e.error, tools: e.tools })) });
 }
 
-// the connected instances handed to the agent (typed loosely — they satisfy the SDK's MCPServer)
+// Typed as any[] because the instances structurally satisfy the SDK's MCPServer interface.
 export function activeMcpServers(): any[] {
   return entries.filter((e) => e.connected && e.server).map((e) => e.server);
 }
-// connected server labels, for the run-context line in the system prompt
+// Labels for the run-context line in the system prompt.
 export function connectedMcpLabels(): string[] {
   return entries.filter((e) => e.connected).map((e) => e.cfg.label);
 }
@@ -60,5 +59,5 @@ export function removeMcpServer(i: number) {
 
 export function reconnectSaved() { syncMcpView(); entries.forEach((e) => connectEntry(e)); }
 
-// notify all connected servers that our roots (sandbox workspace) changed
+// Notify connected servers that the exposed roots (sandbox workspace) changed.
 export function notifyRootsChanged() { entries.forEach((e) => e.server?.notifyRootsChanged()); }

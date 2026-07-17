@@ -1,16 +1,16 @@
-// In-browser LLM chat via @mlc-ai/web-llm (MLC, WebGPU). A purpose-built LLM runtime — KV-cache,
-// streaming, a real model registry — so it's a stronger CHAT brain than transformers.js (which AUTOMO
-// keeps for ASR/TTS/embeddings). Conforms to the same BrowserEngine interface as transformers.ts, so
+// In-browser LLM chat via @mlc-ai/web-llm (MLC, WebGPU). A purpose-built LLM runtime (KV-cache,
+// streaming, a real model registry), so it's a stronger chat backend than transformers.js, which is
+// kept for ASR/TTS/embeddings. Conforms to the same BrowserEngine interface as transformers.ts, so
 // runtime/browser-model.ts can drive either behind one SDK Model.
 //
-// Dep-gated dynamic import (variable specifier) → bundles WITHOUT `@mlc-ai/web-llm`; add it to run.
+// Dep-gated dynamic import (variable specifier) so this bundles without `@mlc-ai/web-llm`; add it to run.
 // Uses CreateMLCEngine (main-thread) to avoid shipping a separate worker asset; generation is offloaded
-// to the GPU regardless. Ported from gh-pages-react/webllm.ts (model registry + VRAM metadata).
+// to the GPU regardless.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { BrowserEngine } from "./transformers";
 
-// Curated small→capable MLC models with VRAM (MB) + f16 gate (from gh-pages-react, verified against
-// web-llm's prebuiltAppConfig). Static so the picker + device profiler work without loading the runtime.
+// Curated small-to-capable MLC models with VRAM (MB) + f16 gate, aligned with web-llm's
+// prebuiltAppConfig. Static so the picker + device profiler work without loading the runtime.
 type Meta = { vram: number; f16?: boolean };
 const MODEL_META: Record<string, Meta> = {
   "SmolLM2-360M-Instruct-q4f16_1-MLC": { vram: 376, f16: true },

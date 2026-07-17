@@ -1,11 +1,11 @@
 // schedule_task — lets the agent queue future work for itself into the durable task substrate
 // (tasks.ts, IndexedDB). The scheduler (scheduler.ts) drains due tasks when autonomous mode is on and
-// the tab is visible. Two safety invariants ride along:
+// the tab is visible. Two safety invariants:
 //   1. Allowlist snapshot + lock: a scheduled task may only use the tools named here, and it can't widen
 //      that scope later (toolAllowlistLocked). Omit `tools` only for a fully-trusted follow-up.
 //   2. Runaway guard: a hard cap on pending scheduled tasks and a bounded delay window, so a model that
 //      loops on "schedule another one" can't flood the queue or schedule work years out.
-// Standard @openai/agents function tool. No plan/model magic — it just writes a durable record.
+// Standard @openai/agents function tool; it writes a durable record.
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import { enqueueTask, appendEvent, getTasks } from "../runtime/autonomy/tasks";

@@ -1,6 +1,6 @@
 // node:url shim. fileURLToPath returns a synthetic path under the mapped package root so a server's
-// data-dir detection (path.includes("<pkg>") && includes("dist")) resolves to a path we serve.
-// Configurable via globalThis.__pkgEntry. Ported from gh-pages-react/shims.
+// data-dir detection (path.includes("<pkg>") && includes("dist")) resolves to a served path.
+// Configurable via globalThis.__pkgEntry.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function fileURLToPath(_u: any): string { return (globalThis as any).__pkgEntry ?? "/pkg/dist/index.js"; }
 export function pathToFileURL(p: string): any {

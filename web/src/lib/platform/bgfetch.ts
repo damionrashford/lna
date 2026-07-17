@@ -1,7 +1,7 @@
-// Background Fetch — OS-level download of model weights that SURVIVES navigation and closing the tab,
+// Background Fetch — OS-level download of model weights that survives navigation and closing the tab,
 // with native download UI. On success the service worker (see build.ts) caches the records into the
-// "automo-weights" cache, and its fetch handler serves them to the in-browser ML libs (transformers.js /
-// kokoro / web-llm) so first inference doesn't re-download multi-MB weights. From PWA-LAB capabilities.
+// "automo-weights" cache and serves them to the in-browser ML libs (transformers.js / kokoro / web-llm)
+// so first inference doesn't re-download multi-MB weights.
 import { logEvent } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -37,7 +37,7 @@ export async function prefetchWeights(
   return { id, abort: () => bgf.abort() };
 }
 
-// Has a given weight set already been cached (so we can skip the fetch)?
+// Whether a given weight set is already cached (so the fetch can be skipped).
 export async function weightsCached(urls: string[]): Promise<boolean> {
   try {
     const cache = await caches.open("automo-weights");

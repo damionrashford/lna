@@ -1,6 +1,6 @@
 // Screen Wake Lock — keep the machine from sleeping during long agent runs. Feature-detected and
 // best-effort: the request is rejected under battery saver or when the tab is hidden, and the OS
-// auto-releases when the tab backgrounds, so we re-acquire on return to foreground while still busy.
+// auto-releases when the tab backgrounds, so re-acquire on return to foreground while still busy.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let sentinel: any = null;
 let wanted = false;

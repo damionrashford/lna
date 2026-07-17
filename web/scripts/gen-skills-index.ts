@@ -1,7 +1,6 @@
-// Codegen: derive the lazy-skills index from the real skills on disk (../.agents/skills/*/SKILL.md)
-// so agent/build.ts never hand-maintains it. A remote gitRepo skill source can't be enumerated at
-// runtime (the SDK can't list a GitHub subpath), so the index must be static — this makes "static"
-// mean "generated from the source of truth" instead of "typed by hand and silently drifting."
+// Codegen: derive the lazy-skills index from the skills on disk (../.agents/skills/*/SKILL.md).
+// A remote gitRepo skill source can't be enumerated at runtime (the SDK can't list a GitHub subpath),
+// so the index must be static — generating it from the source of truth avoids hand-maintained drift.
 //
 // Run standalone (`bun run gen:skills`) or as the build.ts prelude. Emits src/lib/agent/skills.generated.ts.
 import { readdirSync, existsSync, statSync, readFileSync, writeFileSync } from "node:fs";
@@ -48,7 +47,6 @@ export const SKILLS_INDEX: SkillIndexEntry[] = ${JSON.stringify(index, null, 2)}
   return index.length;
 }
 
-// run directly
 if (import.meta.main) {
   const n = writeSkillsIndex();
   console.log(`gen-skills-index: wrote ${n} skill(s) → src/lib/agent/skills.generated.ts`);

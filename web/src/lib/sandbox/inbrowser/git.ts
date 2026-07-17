@@ -1,7 +1,7 @@
-// isomorphic-git over the same Pyodide FS — so `materializeEntry({ gitRepo })` clones a repo into the
-// in-browser workspace (the bridge does this natively; here we do it in the page). Ported from
-// gh-pages-react/src/lib/gitfs.ts, trimmed to the clone path. isomorphic-git + its web http client are
-// dep-gated dynamic imports so nothing bundles until the in-browser sandbox is selected.
+// isomorphic-git over the same Pyodide FS, so materializeEntry({ gitRepo }) clones a repo into the
+// in-browser workspace (the bridge does this natively; this does it in the page). Only the clone path
+// is implemented. isomorphic-git and its web http client are dynamic imports so nothing bundles until
+// the in-browser sandbox is selected.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { persist } from "./pyodide";
 
@@ -10,8 +10,8 @@ const CORS_PROXY = "https://cors.isomorphic-git.org"; // clone against hosts wit
 type Errno = Error & { code: string };
 function errno(code: string, msg: string): Errno { const e = new Error(msg) as Errno; e.code = code; return e; }
 
-// isomorphic-git wants an fs with the {promises:{readFile,writeFile,unlink,readdir,mkdir,rmdir,stat,
-// lstat,readlink,symlink,chmod}} shape and Node-style errno codes — build it straight from Emscripten FS.
+// isomorphic-git requires an fs with the {promises:{readFile,writeFile,unlink,readdir,mkdir,rmdir,stat,
+// lstat,readlink,symlink,chmod}} shape and Node-style errno codes; build it from Emscripten FS.
 function makeGitFs(FS: any) {
   const exists = (p: string): boolean => { try { return FS.analyzePath(p).exists; } catch { return false; } };
   const wrapStat = (s: any) => {
@@ -46,7 +46,7 @@ function makeGitFs(FS: any) {
   return { promises };
 }
 
-// Clone `url` into `dir` (a path in the Pyodide FS), shallow + single-branch, then persist to OPFS.
+// Clone `url` into `dir` (a path in the Pyodide FS), shallow and single-branch, then persist to OPFS.
 export async function gitClone(pyodide: any, url: string, dir: string, ref?: string): Promise<void> {
   const git: any = (await import("isomorphic-git").catch(() => {
     throw new Error("In-browser git needs `isomorphic-git` — add it to clone repos in the page.");

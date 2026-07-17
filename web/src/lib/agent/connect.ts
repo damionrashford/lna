@@ -1,12 +1,11 @@
-// Connection + model discovery for the selected inference backend, plus browser-triggered model pull
-// and image generation. The connect() flow drives the ConnectGate diagnostics.
+// Connection and model discovery for the selected inference backend, plus browser-triggered model
+// pull and image generation. connect() drives the ConnectGate diagnostics.
 import { S, trimUrl, set, getState, setStatus, setCap } from "../../store";
 import { providerFor } from "@automo/inference";
 import { localFetch, probeReachable, probeBridge } from "../net/index";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// the inference backend selected in settings (Ollama / vLLM / HuggingFace / in-browser)
 export function activeProvider() {
   return providerFor(S.provider as any, { ollamaUrl: S.url, vllmUrl: S.vllmUrl, hfToken: S.hfToken });
 }
@@ -31,7 +30,7 @@ export async function refreshModels(): Promise<string[]> {
   const provider = activeProvider();
   let models: string[];
   if (provider.kind === "ollama") {
-    // keep Ollama's /api/tags path (throws on error → the connect() CORS/unreachable diagnostics)
+    // Ollama uses /api/tags; throwing on non-ok drives connect()'s CORS/unreachable diagnostics.
     const res = await localFetch(trimUrl() + "/api/tags", { method: "GET" });
     if (!res.ok) throw new Error(`Ollama replied HTTP ${res.status}`);
     models = ((await res.json()).models || []).map((m: any) => m.name);
@@ -79,7 +78,7 @@ function showDiag(kind: string) {
   set({ diag: { show: true, html: map[kind] || `<b>Connection error.</b> ${kind.replace("other:", "")}` } });
 }
 
-// pull a model FROM THE BROWSER (POST /api/pull, NDJSON progress) — Ollama-specific
+// Pull a model via Ollama's /api/pull (NDJSON progress stream), driven from the browser.
 export async function pullModel(name: string) {
   name = (name || "").trim(); if (!name) return;
   set({ pull: { show: true, pct: 0, text: "starting…" } });
@@ -104,7 +103,7 @@ export async function pullModel(name: string) {
   } catch (err: any) { set({ pull: { show: true, pct: getState().pull.pct, text: "failed: " + err.message } }); }
 }
 
-// image generation (/v1/images/generations, e.g. flux) — returns a data URL for the chat layer
+// Image generation (/v1/images/generations); returns a data URL for the chat layer.
 export async function generateImageData(prompt: string): Promise<{ dataUrl: string; caption: string }> {
   if (!S.image) throw new Error("pick an image model in settings");
   const res = await localFetch(trimUrl() + "/v1/images/generations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: S.image, prompt, size: "512x512", response_format: "b64_json" }) });

@@ -1,7 +1,7 @@
 // Production build: bundle index.html (+ React/TSX + Tailwind + React Compiler) into static
 // assets GitHub Pages can serve, then inject URL-dependent SEO + copy public/.
 //
-// Nothing about the site URL is hardcoded — it's derived, so a future custom domain "just works":
+// The site URL is derived, not hardcoded, so a later custom domain needs no code change:
 //   1. public/CNAME (how you set a GitHub Pages custom domain) → https://<domain>/ at the root.
 //   2. else the repo itself → https://<owner>.github.io/<repo>/  (or /  for a <owner>.github.io repo),
 //      read from GITHUB_REPOSITORY (CI) or `git remote get-url origin` (local).

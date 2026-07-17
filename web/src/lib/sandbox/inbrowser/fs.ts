@@ -1,6 +1,5 @@
-// just-bash IFileSystem backed by Pyodide's (Emscripten) FS, so bash, Python, and git all operate on the
-// SAME live files under /persist. Ported from gh-pages-react/src/pyodide-fs.ts. Emscripten FS is
-// synchronous; each method is wrapped async.
+// just-bash IFileSystem backed by Pyodide's (Emscripten) FS, so bash, Python, and git all operate on
+// the same live files under /persist. Emscripten FS is synchronous; each method is wrapped async.
 import { MOUNT_PATH } from "./pyodide";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

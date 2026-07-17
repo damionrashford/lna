@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Studio · genre: atmospheric · macrostructure: Conversational · theme: Midnight+Coral · tone: technical-warm */
 :root{
   --bg: oklch(16% 0.01 275);
   --bg-hi: oklch(19% 0.016 18);
@@ -76,7 +75,7 @@ main::-webkit-scrollbar{width:8px} main::-webkit-scrollbar-thumb{background:var(
 .msg.bot .bubble .cursor{display:inline-block;width:7px;height:15px;background:var(--coral);vertical-align:text-bottom;animation:pulse .8s infinite;margin-left:1px;border-radius:1px}
 
 /* connect gate */
-/* gate mode: center the connect card in the viewport (margin:auto stays scrollable if ever too tall) */
+/* Gate mode centers the connect card via margin:auto (stays scrollable if it ever overflows). */
 main.gate-mode{display:flex;flex-direction:column}
 .gate{max-width:560px;margin:auto;padding:14px 22px;text-align:center}
 .gate .badge{width:48px;height:48px;margin:0 auto 12px}
@@ -104,7 +103,7 @@ main.gate-mode{display:flex;flex-direction:column}
   border:1px solid oklch(68% 0.17 25 / 0.4);border-radius:var(--r-sm);padding:12px 14px;color:var(--ink)}
 .gate .diag b{color:var(--err)}
 .gate .diag ul{margin:8px 0 0 16px;color:var(--ink-mid);line-height:1.6}
-/* machine recommendation — positive info, NOT an error (neutral surface + coral accent) */
+/* Machine recommendation — informational, not an error: neutral surface with a coral accent. */
 .gate .machine{margin-top:10px;text-align:left;font-size:0.8rem;line-height:1.45;color:var(--ink-mid);
   background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 12px}
 .gate .machine b{color:var(--ink)}
@@ -193,7 +192,7 @@ main.gate-mode{display:flex;flex-direction:column}
 .field label{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
 .field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
   padding:10px 12px;color:var(--ink);font-family:var(--mono);font-size:0.82rem}
-.field select{padding-right:30px;text-overflow:ellipsis}  /* room for the native arrow, truncate long options */
+.field select{padding-right:30px;text-overflow:ellipsis}  /* room for the native select arrow; truncate long options */
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--focus);outline:none}
 .field .note{font-size:0.74rem;color:var(--muted);line-height:1.5}
 .caps{display:flex;flex-direction:column;gap:9px}
@@ -209,7 +208,7 @@ main.gate-mode{display:flex;flex-direction:column}
 .ghost:hover{color:var(--ink);border-color:var(--border-hi)}
 .privacy{font-size:0.74rem;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);padding-top:16px}
 .privacy b{color:var(--ink-mid)}
-/* onboarding — warm, non-blocking first-run welcome */
+/* onboarding — first-run welcome */
 .gate-hi{font-size:0.82rem;letter-spacing:0.02em;color:var(--coral);margin-bottom:8px;font-weight:600}
 .ob-scrim{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;
   background:oklch(10% 0.01 275 / 0.66);backdrop-filter:blur(4px);animation:obfade .25s ease}
@@ -262,12 +261,12 @@ main.gate-mode{display:flex;flex-direction:column}
   .badge{width:34px;height:34px} .badge svg{width:15px;height:15px}
   .iconbtn{width:36px;height:36px} .iconbtn svg{width:16px;height:16px}
   .status{padding:6px 11px;font-size:0.68rem;white-space:nowrap}
-  .status.tok{display:none}                 /* token pill is a nice-to-have — drop it on phones */
+  .status.tok{display:none}                 /* token pill is non-essential — drop it on phones */
   .thread{padding:12px 14px 8px}
   .composer{padding:12px 14px 18px}
   .gate{padding:0 16px}
 }
-/* very small phones: collapse the connection pill to just its dot so header controls never clip */
+/* very small phones: collapse the connection pill to its dot so header controls never clip */
 @media(max-width:430px){
   .status:not(.tok){padding:9px}
   .status:not(.tok) span:last-child{display:none}

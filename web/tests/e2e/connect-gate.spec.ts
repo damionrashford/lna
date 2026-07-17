@@ -1,6 +1,6 @@
 // E2E: the "Connect to your machine" onboarding gate — the app's first screen before any model
 // connection, and the main surface a headless runner can exercise (no local Ollama in CI). Includes a
-// regression for the step-1 command that used to clip its tail (`ollama serve`) under the copy button.
+// regression guard for the step-1 command clipping its tail (`ollama serve`) under the copy button.
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {

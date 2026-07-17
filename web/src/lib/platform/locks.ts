@@ -1,7 +1,7 @@
-// Web Locks — ensure only one tab drives the shared bridge sandbox at a time, so two tabs can't
-// stomp the same on-disk workspace. We hold a named lock for the lifetime of this tab's sandbox
-// session; a second tab that can't get it (ifAvailable) is told to use the tab that owns it.
-// Feature-detected: where Web Locks is unavailable we don't block (single-tab assumption).
+// Web Locks — ensure only one tab drives the shared bridge sandbox at a time, so two tabs can't stomp
+// the same on-disk workspace. A named lock is held for the lifetime of this tab's sandbox session; a
+// second tab that can't acquire it (ifAvailable) is told to use the owning tab. Feature-detected: where
+// Web Locks is unavailable, don't block (single-tab assumption).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const LOCK = "automo-sandbox";
 let release: (() => void) | null = null;

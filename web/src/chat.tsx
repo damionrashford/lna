@@ -1,5 +1,5 @@
-// AUTOMO chat context — the Vercel AI SDK UI `useChat` wired to the local SandboxAgent
-// transport, with per-session UIMessage persistence + multimodal + image generation.
+// Chat context: AI SDK `useChat` wired to the local agent transport, with per-session message
+// persistence, multimodal input, and image generation.
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { useStore, setStatus, S } from "./store";
@@ -38,7 +38,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     onError: () => setStatus("err", "run failed"),
   }) as any;
 
-  // load this session's messages when it changes; only persist for the loaded session
+  // Load this session's messages on switch; loadedFor guards against persisting to the wrong session.
   const loadedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!sessionId) return;
@@ -48,19 +48,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [sessionId, setMessages]);
 
-  // persist once a turn settles for the loaded session: conversation + durable sandbox workspace
+  // On a settled turn (status "ready"), persist the conversation and the sandbox workspace.
   useEffect(() => {
     if (sessionId && loadedFor.current === sessionId && status === "ready") {
       saveUiMessages(sessionId, messages);
       persistActiveWorkspace();
-      // client-side compaction (server-side is disabled by our shim); best-effort, only fires when large
+      // Client-side compaction; the server-side path is disabled by the shim. Best-effort, only fires when large.
       maybeCompact(messages, S.model).then((c) => {
         if (c && loadedFor.current === sessionId) { setMessages(c); saveUiMessages(sessionId, c); }
       });
     }
   }, [messages, status, sessionId, setMessages]);
 
-  // hold a screen wake lock while a run is in flight so the machine doesn't sleep mid-task
+  // Hold a screen wake lock while a run is in flight so the machine doesn't sleep mid-task.
   const running = status === "submitted" || status === "streaming";
   useEffect(() => { if (running) acquireWakeLock(); else releaseWakeLock(); }, [running]);
 

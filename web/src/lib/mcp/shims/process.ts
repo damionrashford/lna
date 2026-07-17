@@ -1,9 +1,9 @@
-// Browser shim for `node:process`, focused on the stdio contract every stdio MCP server speaks: the
-// server reads process.stdin and writes process.stdout. We expose hooks (onServerWrite / writeToServer)
-// so an in-page MCP client can drive both ends — no spawn, no bridge. Ported from gh-pages-react/shims.
+// Browser shim for node:process, focused on the stdio contract every stdio MCP server speaks: the
+// server reads process.stdin and writes process.stdout. Hooks (onServerWrite / writeToServer) let an
+// in-page MCP client drive both ends without a spawn or bridge.
 //
-// One global process ⇒ ONE in-page stdio server at a time (matches the source). Servers that accept
-// explicit streams can instead be handed a fresh pair via makeStdioPair() below.
+// The global process backs a single in-page stdio server at a time. Servers that accept explicit
+// streams can instead be handed a fresh pair via makeStdioPair() below.
 import { Buffer } from "buffer";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -22,8 +22,8 @@ export class Emitter {
   setEncoding() { return this; }
 }
 
-// server's stdin (client → server). Buffers chunks written before the server attaches its 'data'
-// listener (the server's main() may do slow async setup before connecting its transport).
+// Server's stdin (client → server). Buffers chunks written before the server attaches its 'data'
+// listener, since the server's main() may do slow async setup before connecting its transport.
 export class Stdin extends Emitter {
   private pending: any[] = [];
   on(ev: string, fn: Listener) {
@@ -34,7 +34,7 @@ export class Stdin extends Emitter {
   push(chunk: any) { if (this.listenerCount("data") > 0) this.emit("data", chunk); else this.pending.push(chunk); }
 }
 
-// server's stdout (server → client). Buffers writes until a sink is registered so nothing is dropped.
+// Server's stdout (server → client). Buffers writes until a sink is registered so nothing is dropped.
 export class Stdout extends Emitter {
   private sink: ((s: string) => void) | null = null;
   private pending: string[] = [];
@@ -49,8 +49,8 @@ export class Stdout extends Emitter {
   onWrite(cb: (s: string) => void) { this.sink = cb; if (this.pending.length) { const q = this.pending.splice(0); q.forEach(cb); } }
 }
 
-// A fresh {stdin, stdout} pair — for servers we construct ourselves and hand explicit streams to
-// (StdioServerTransport(stdin, stdout)); lets multiple in-page servers coexist.
+// A fresh {stdin, stdout} pair for servers handed explicit streams via
+// StdioServerTransport(stdin, stdout); lets multiple in-page servers coexist.
 export function makeStdioPair() {
   const stdin = new Stdin();
   const stdout = new Stdout();
@@ -61,7 +61,7 @@ export function makeStdioPair() {
   };
 }
 
-// ---- the global singleton process (for servers that read the default process.stdin/stdout) ----
+// The global singleton process, for servers that read the default process.stdin/stdout.
 const stdin = new Stdin();
 const stdout = new Stdout();
 const stderr = Object.assign(new Emitter(), {
@@ -86,11 +86,11 @@ const proc: any = {
   umask: () => 0, binding: () => ({}), features: {},
 };
 
-// NOTE: we deliberately do NOT set globalThis.process. Pyodide and transformers.js detect Node vs
-// browser via `typeof process !== "undefined" && process.versions?.node`; installing a node-shaped
-// global process makes them take the Node path and `import("node:url")` etc., which fails in the browser.
-// The in-page MCP server reaches this shim only through the aliased `node:process` import (StdioServer-
-// Transport), and we hand it EXPLICIT streams, so no bundled code needs the bare global.
+// Deliberately does NOT set globalThis.process. Pyodide and transformers.js detect Node vs browser via
+// `typeof process !== "undefined" && process.versions?.node`; a node-shaped global process makes them
+// take the Node path (`import("node:url")` etc.), which fails in the browser. The in-page MCP server
+// reaches this shim only through the aliased node:process import and is handed explicit streams, so no
+// bundled code needs the bare global.
 
 export default proc;
 export const env = proc.env;

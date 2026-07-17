@@ -1,23 +1,21 @@
-// LNA bridge — the local sandbox host + stdio pipe that a PUBLIC page reaches over LNA.
+// LNA bridge: local sandbox host + stdio pipe that a public page reaches over Local Network Access.
 //
-// Two channels over one WebSocket (127.0.0.1:7967, LNA-gated, token-gated):
-//   1. sandbox RPC  — hosts the SDK's UnixLocalSandboxClient. AUTOMO's in-browser
-//      @openai/agents SandboxAgent drives a REAL Unix sandbox on this machine: exec,
-//      apply_patch (V4A diffs), readFile/listDir, materializeEntry (manifest + gitRepo),
-//      persist/hydrate (snapshots). The browser session is a thin proxy to this.
-//   2. stdio spawn  — pipes a spawned process's stdin/stdout/stderr (stdio MCP servers).
+// Two channels over one WebSocket (127.0.0.1:7967, token-gated):
+//   1. sandbox RPC — hosts the SDK's UnixLocalSandboxClient. The in-browser @openai/agents
+//      SandboxAgent drives a real Unix sandbox on this machine: exec, apply_patch (V4A diffs),
+//      readFile/listDir, materializeEntry (manifest + gitRepo), persist/hydrate (snapshots).
+//   2. stdio spawn — pipes a spawned process's stdin/stdout/stderr (stdio MCP servers).
 //
 // Run: BRIDGE_TOKEN=dev bun bridge.ts   (listens on 127.0.0.1:7967)
 //   optional: BRIDGE_ALLOW="bash,node,python3"  (stdio-spawn command allowlist)
 //
-// SECURITY: this spawns processes + runs a real shell → remote code execution if exposed.
-// Gates: token handshake before any op, spawn allowlist, bound to 127.0.0.1. Front it with a
-// tunnel only if you keep the token secret. The sandbox exec is NOT allowlisted (that's the
-// point — it's the agent's shell), so the token is the whole perimeter; guard it.
+// Security: this spawns processes and runs a real shell, so exposure means remote code execution.
+// Gates: token handshake before any op, spawn allowlist, bound to 127.0.0.1. The sandbox exec is
+// deliberately not allowlisted (it is the agent's shell), so the token is the whole perimeter — guard it.
 import { UnixLocalSandboxClient } from "@openai/agents/sandbox/local";
 import { Manifest } from "@openai/agents/sandbox";
 
-// rebuild a real Manifest from the browser's serialized {entries, environment} input
+// Reconstruct a Manifest from the browser's serialized {entries, environment}.
 const toManifest = (input: any) => (input instanceof Manifest ? input : new Manifest(input ?? { entries: {} }));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38,8 +36,8 @@ const u8ToB64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
 const b64ToU8 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
 
 // ---- host hardware probe (read-only; refines the browser's coarse recommendation) ----
-// Run a fixed, argument-free read-only command with a hard timeout; never spawns anything the caller
-// influences, so the /hw route stays safe to serve unauthenticated (same class as the liveness root).
+// Fixed, argument-free command with a hard timeout; nothing the caller influences reaches spawn, so
+// the /hw route is safe to serve unauthenticated (same trust class as the liveness root).
 async function sh(cmd: string[], ms = 4000): Promise<string> {
   try {
     const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
@@ -52,7 +50,7 @@ async function sh(cmd: string[], ms = 4000): Promise<string> {
 }
 const GiB = (bytes: number) => Math.round(bytes / 2 ** 30);
 
-let hwCache: any = null; // measured once per process — hardware doesn't change under us
+let hwCache: any = null; // measured once per process — host hardware is static
 async function probeHostHardware() {
   if (hwCache) return hwCache;
   const os = process.platform;

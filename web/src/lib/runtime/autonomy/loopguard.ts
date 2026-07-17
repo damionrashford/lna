@@ -1,12 +1,13 @@
-// Loop detection for the outer autonomous loop. A stuck task retries and produces the SAME result every
-// time — a burned budget with no progress. We fingerprint each attempt's output and, if the same
-// fingerprint repeats, declare the task looping so the loop can fail it fast instead of retrying to zero.
+// Loop detection for the outer autonomous loop. A stuck task retries and produces the same result every
+// time — a burned budget with no progress. Each attempt's output is fingerprinted and, if the same
+// fingerprint repeats, the task is declared looping so the loop can fail it fast instead of retrying to
+// zero.
 //
-// Volatile-ID stripping is the crux: two identical runs still differ by timestamps, uuids, hex ids, and
-// run counters, so a raw hash never matches. We normalize those out first, then hash, so "same work,
-// different nonce" collapses to one fingerprint.
+// Volatile-ID stripping is the crux: two otherwise-identical runs still differ by timestamps, uuids, hex
+// ids, and run counters, so a raw hash never matches. Normalizing those out before hashing collapses
+// "same work, different nonce" to one fingerprint.
 
-// Replace the things that legitimately change run-to-run with a stable placeholder.
+// Replace values that legitimately change run-to-run with a stable placeholder.
 function stripVolatile(s: string): string {
   return s
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>") // uuids
@@ -18,7 +19,7 @@ function stripVolatile(s: string): string {
     .toLowerCase();
 }
 
-// Small, fast, stable string hash (FNV-1a, 32-bit) rendered hex — good enough to compare run outputs.
+// FNV-1a 32-bit string hash, rendered hex — sufficient to compare run outputs for equality.
 function fnv1a(s: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
@@ -29,8 +30,8 @@ export function fingerprint(output: string): string {
   return fnv1a(stripVolatile(output ?? ""));
 }
 
-// Tracks recent fingerprints per task id (in-memory, session-scoped — loop detection is a within-session
-// safety net, not durable state). record() returns how many times this exact output has now been seen.
+// Recent fingerprints per task id, in-memory and session-scoped: loop detection is a within-session
+// safety net, not durable state.
 const seen = new Map<string, string[]>();
 const WINDOW = 4; // remember the last few attempts per task
 
@@ -44,7 +45,7 @@ export function recordAttempt(taskId: string, output: string): number {
   return arr.filter((x) => x === fp).length;
 }
 
-// True once the same output has repeated at least `threshold` times — the task is going in circles.
+// True once the same output has repeated at least `threshold` times.
 export function isLooping(taskId: string, output: string, threshold = 2): boolean {
   return recordAttempt(taskId, output) >= threshold;
 }

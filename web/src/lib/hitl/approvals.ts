@@ -1,7 +1,8 @@
 // Human-in-the-loop registry — one surface for two kinds of pending user input:
 //   - "approval": an SDK tool call paused on needsApproval (approve / reject).
 //   - "elicitation": an MCP server requesting structured input mid-tool-call, with a JSON-Schema form
-//     (accept + content / decline / cancel). Same idea, richer payload.
+//     (accept + content / decline / cancel).
+// A pending item resolves via a stored Promise, so a tool call can pause and later resume in one stream.
 // The transport / MCP client await these; the UI (Approvals.tsx) renders them and resolves.
 import { useSyncExternalStore } from "react";
 import { setBadge } from "../platform/badge";

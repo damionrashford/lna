@@ -1,9 +1,8 @@
-// SQLite in the browser via sql.js (SQLite compiled to WASM). A real relational store for AUTOMO —
-// structured memory, a searchable session index, tool-usage logs — instead of opaque IDB blobs. The DB
-// lives in memory; we snapshot it to IDB (as bytes) after writes so it survives reloads. Ported in
-// spirit from gh-pages-react/sqljs.ts (CDN-pinned wasm via locateFile).
+// SQLite in the browser via sql.js (SQLite compiled to WASM). The DB lives in memory and is snapshotted
+// to IDB (as bytes) after writes so it survives reloads.
 //
-// Dep-gated dynamic import (variable specifier) → bundles WITHOUT `sql.js`; add it to actually use.
+// sql.js is a runtime-resolved dynamic import (variable specifier) so this bundles without the dep; it
+// must be installed to use.
 import { idbGet, idbSet } from "./idb";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

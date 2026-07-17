@@ -32,7 +32,6 @@ test("connecting reveals the chat composer and hides the gate", async ({ page })
   // the composer only renders once connected
   await expect(page.getByPlaceholder("Ask anything…")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
-  // the connect gate is gone
   await expect(page.getByRole("heading", { name: "Connect to your machine" })).toBeHidden();
 });
 

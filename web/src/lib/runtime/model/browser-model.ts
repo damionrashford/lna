@@ -1,11 +1,10 @@
 // BrowserModel — an SDK `Model` backed by the in-browser transformers.js engine (@automo/inference's
-// createBrowserEngine). This is what lets the `browser` provider actually DRIVE the agent, not just a
-// degraded tools-less chat: the SandboxAgent resolves its model through the default model provider, so
-// returning a BrowserModel here routes every turn through WebGPU/WASM generation on the user's machine.
+// createBrowserEngine). The SandboxAgent resolves its model through the default model provider, so
+// returning a BrowserModel routes every turn through WebGPU/WASM generation on the user's machine.
 //
-// Caveat by design: transformers.js generates TEXT only — no native tool-call transport. The agent's
-// tools (shell, apply_patch, MCP) are surfaced to the model as prompt text; whether they fire depends on
-// the model emitting tool syntax the SDK can parse. So this is real local inference, capability-degraded.
+// Constraint: transformers.js generates text only — no native tool-call transport. Agent tools (shell,
+// apply_patch, MCP) are surfaced as prompt text; whether they fire depends on the model emitting tool
+// syntax the SDK can parse.
 import type { Model, ModelRequest, ModelResponse, StreamEvent, AgentOutputItem } from "@openai/agents";
 import { Usage } from "@openai/agents";
 import { createBrowserEngine, createWebllmEngine, type BrowserEngine } from "@automo/inference";
@@ -15,7 +14,7 @@ export type BrowserEngineKind = "transformers" | "webllm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// pull plain text out of any AgentInputItem shape (string, {content:string}, or {content:[{text}]})
+// Extract plain text from any AgentInputItem shape (string, {content:string}, or {content:[{text}]}).
 function itemText(item: any): string {
   if (typeof item === "string") return item;
   const c = item?.content;
@@ -41,7 +40,7 @@ const assistantMsg = (text: string): AgentOutputItem =>
 
 export class BrowserModel implements Model {
   private engine: Promise<BrowserEngine> | null = null;
-  // engineKind picks the in-browser runtime: "webllm" (MLC — stronger chat) or "transformers" (ONNX).
+  // engineKind selects the in-browser runtime: "webllm" (MLC) or "transformers" (ONNX).
   constructor(private modelName: string, private engineKind: BrowserEngineKind = "transformers", private dtype = "q4f16") {}
 
   private getEngine(): Promise<BrowserEngine> {
@@ -64,7 +63,7 @@ export class BrowserModel implements Model {
     return { usage: new Usage({ requests: 1, inputTokens, outputTokens, totalTokens: inputTokens + outputTokens }), output: [assistantMsg(text)] };
   }
 
-  // Bridge the engine's token CALLBACK into an async generator: tokens land in a queue, the loop drains
+  // Bridge the engine's token callback into an async generator: tokens land in a queue, the loop drains
   // it and yields output_text_delta, waking on each token until generation settles, then response_done.
   async *getStreamedResponse(request: ModelRequest): AsyncIterable<StreamEvent> {
     const engine = await this.getEngine();

@@ -1,9 +1,8 @@
 // In-browser text embeddings + semantic rerank via transformers.js (@huggingface/transformers,
-// feature-extraction). Ported in spirit from mlx-agent's MLX rerank, but runs FULLY in-browser — no
-// embed server, no infra. Used to rerank web-search hits by meaning and to keep only the passages of a
-// long page relevant to a focus. Graceful: callers fall back to raw order if the dep isn't installed.
+// feature-extraction). Reranks web-search hits by meaning and keeps only the passages of a long page
+// relevant to a focus. Callers fall back to raw order if the dep isn't installed.
 //
-// Dep-gated dynamic import (variable specifier) so this bundles WITHOUT `@huggingface/transformers`.
+// Dep-gated dynamic import (variable specifier) so this bundles without `@huggingface/transformers`.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export interface Embedder {
@@ -12,7 +11,7 @@ export interface Embedder {
 }
 
 let embedderPromise: Promise<Embedder> | null = null;
-// small, fast, widely-used sentence-embedding model (384-dim) — good rerank quality at low cost
+// small 384-dim sentence-embedding model — good rerank quality at low cost
 export async function getEmbedder(model = "Xenova/all-MiniLM-L6-v2"): Promise<Embedder> {
   if (embedderPromise) return embedderPromise;
   embedderPromise = (async () => {

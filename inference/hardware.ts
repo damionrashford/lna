@@ -10,7 +10,7 @@ export interface GpuInfo {
   description: string;
   f16: boolean;        // shader-f16 feature (matters for LLM inference perf)
   maxBufferMiB: number;
-  maxStorageBindingMiB: number; // web-llm HARD-gates model load on this — a real OOM predictor
+  maxStorageBindingMiB: number; // web-llm gates model load on this — a reliable OOM predictor
   fallback: boolean;   // software/fallback adapter → effectively no GPU accel
 }
 
@@ -108,7 +108,7 @@ export async function detectHardware(): Promise<HardwareProfile> {
   let onBattery: boolean | null = null, batteryLevel: number | null = null;
   try { const b = await (navigator as any).getBattery?.(); if (b) { onBattery = !b.charging; batteryLevel = typeof b.level === "number" ? b.level : null; } } catch { /* unsupported */ }
   // Mobile: prefer the authoritative UA-CH boolean; else a touchscreen AND coarse primary pointer (a
-  // laptop trackpad is "fine", so it stays desktop). Keeps us from recommending a 20B to an iPhone.
+  // laptop trackpad is "fine", so it stays desktop). Avoids recommending a 20B model to a phone.
   const uaMobile = (navigator as any).userAgentData?.mobile;
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
   const touch = (navigator.maxTouchPoints ?? 0) > 0;
@@ -133,9 +133,9 @@ export async function detectHardware(): Promise<HardwareProfile> {
 
 export interface ModelRecommendation { tier: "cpu" | "small" | "medium" | "large"; note: string; examples: string[]; canRunInBrowser: boolean; budgetGB: number }
 
-// GPU footprint budget for in-browser inference (from gh-pages-react/webgpu.ts). WebGPU exposes no
-// total-VRAM figure, so derive a budget: a RAM tier ceilinged by the GPU's single-buffer limit. Fallback
-// (software) adapters get the floor. This is what tells the UI which in-browser model won't OOM.
+// GPU footprint budget for in-browser inference. WebGPU exposes no total-VRAM figure, so derive a
+// budget: a RAM tier ceilinged by the GPU's single-buffer limit. Fallback (software) adapters get the
+// floor. This is what tells the UI which in-browser model won't OOM.
 export function gpuBudgetGB(p: HardwareProfile): number {
   if (!p.gpu || p.gpu.fallback) return 0.6;
   const ram = p.ramGiB ?? 8;

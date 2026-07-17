@@ -1,6 +1,5 @@
-// The local user profile — one identity per browser (no accounts, no server; stays local-first). Captured
-// by the warm, non-blocking onboarding and editable in Settings. Used to personalize the greeting and the
-// agent's system prompt so AUTOMO feels like *your* assistant, not a generic one.
+// Local user profile — one identity per browser, stored client-side (no accounts, no server). Captured by
+// onboarding, editable in Settings, and folded into the greeting and the agent's system prompt.
 export type Tone = "warm" | "concise" | "technical" | "";
 export interface Profile {
   name: string;      // what to call them

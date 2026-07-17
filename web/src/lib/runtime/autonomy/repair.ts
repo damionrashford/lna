@@ -1,8 +1,7 @@
-// Tolerant JSON parsing for model output. Local/small models routinely wrap JSON in prose or ```fences,
-// emit trailing commas, single quotes, or unquoted keys, or truncate mid-object. A strict JSON.parse
-// throws on all of those and wastes a turn (or, in a stricter host, crashes the run). This runs an
-// escalating series of repairs and, if every pass fails, degrades to a safe fallback instead of throwing.
-// Used by the critic gate to read a verdict, and available to any code that must parse model-authored JSON.
+// Tolerant JSON parsing for model output. Local/small models routinely wrap JSON in prose or ``` fences,
+// emit trailing commas, single quotes, or unquoted keys, or truncate mid-object; a strict JSON.parse
+// throws on all of those and wastes a turn. This runs an escalating series of repairs and degrades to a
+// safe fallback instead of throwing when every pass fails. Used by the critic gate to read a verdict.
 
 // Strip a ```json … ``` (or bare ```) fence and any leading/trailing prose around the first JSON value.
 function unfence(s: string): string {
@@ -50,7 +49,7 @@ export function repairJson(raw: string): unknown {
   return undefined;
 }
 
-// Parse tool-call arguments; always returns an object (degrades to {}), so a caller never crashes on a
+// Parse tool-call arguments, always returning an object (degrades to {}) so a caller never crashes on a
 // malformed-arg emission — it gets an empty arg set and can surface a validation error instead.
 export function repairToolArgs(raw: string): Record<string, unknown> {
   const v = repairJson(raw);

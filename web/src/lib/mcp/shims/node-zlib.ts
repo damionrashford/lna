@@ -1,6 +1,6 @@
-// Alternate node:zlib shim that returns raw Uint8Arrays (for servers/utilities like just-bash's
-// gzip/gunzip/zcat that call gunzipSync etc. and don't need Node Buffers). Backed by fflate; maps Node's
-// zlib names + constants to fflate equivalents. Ported from gh-pages-react/shims.
+// Alternate node:zlib shim that returns raw Uint8Arrays (for callers like just-bash's gzip/gunzip/zcat
+// that call gunzipSync etc. and don't need Node Buffers). Backed by fflate; maps Node's zlib names and
+// constants to fflate equivalents.
 import {
   gunzipSync as fGunzip, gzipSync as fGzip, unzlibSync as fInflate, zlibSync as fDeflate,
   inflateSync as fInflateRaw, deflateSync as fDeflateRaw,

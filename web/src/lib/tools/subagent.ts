@@ -1,8 +1,8 @@
 // research — spawn a subagent for read-only fan-out. The main agent delegates a narrow research question
-// to a fresh agent that has ONLY search/read tools (web_search, read_url), its own isolated context, and
-// its own turn budget. The subagent inspects and summarizes; it can't write files, run the sandbox,
-// schedule work, or touch the plan — so parallel/deep discovery can't corrupt the main run's state. Only
-// its final summary comes back, keeping the main context small (the whole point of a subagent).
+// to a fresh agent that has only search/read tools (web_search, read_url), its own isolated context, and
+// its own turn budget. The subagent cannot write files, run the sandbox, schedule work, or touch the
+// plan, so parallel/deep discovery can't corrupt the main run's state. Only its final summary comes back,
+// keeping the main context small.
 import { Agent, run, tool } from "@openai/agents";
 import { z } from "zod";
 import { S } from "../../store";

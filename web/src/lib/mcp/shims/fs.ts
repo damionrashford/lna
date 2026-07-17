@@ -1,8 +1,7 @@
 // node:fs shim — a lazy, synchronous, HTTP-backed read-only fs. A bundled server does
-// readFileSync(<synthetic path>); we map that path to a served URL and fetch it SYNCHRONOUSLY (the
-// x-user-defined charset trick lets sync XHR return binary on the main thread), cache it, and return a
-// Buffer. Writes go to an in-memory cache. The path→URL map is injected via globalThis.__fsMap.
-// Ported from gh-pages-react/shims.
+// readFileSync(<synthetic path>); the path maps to a served URL fetched synchronously (the
+// x-user-defined charset trick lets sync XHR return binary on the main thread), cached, and returned
+// as a Buffer. Writes go to an in-memory cache. The path→URL map is injected via globalThis.__fsMap.
 import { Buffer } from "buffer";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

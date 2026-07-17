@@ -1,5 +1,5 @@
-// Tiny external store: a single immutable-at-top-level state object that React
-// subscribes to via useSyncExternalStore. Action modules mutate through set().
+// External store: one top-level-immutable state object that React subscribes to via
+// useSyncExternalStore. Action modules mutate through set().
 import { useSyncExternalStore } from "react";
 
 export type Cap = { dot: string; text: string };
@@ -96,7 +96,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 // distributive Omit so the ThreadItem discriminated union survives
 type WithOptId<T> = T extends unknown ? Omit<T, "id"> & { id?: string } : never;
 
-// thread helpers — all go through set() so React re-renders
+// Thread helpers — all mutate via set() to trigger a re-render.
 export function pushThread(item: WithOptId<ThreadItem>): string {
   const id = item.id ?? uid();
   set({ thread: [...state.thread, { ...item, id } as ThreadItem] });
@@ -112,8 +112,8 @@ export function moveThreadToEnd(id: string) {
   set({ thread: [...state.thread.filter((t) => t.id !== id), item] });
 }
 
-// structured run log — a capped ring buffer surfaced in the debug panel; also echoed to the console with a
-// styled AUTOMO badge (%c) so app logs stand out from library noise in devtools.
+// Run log — a capped ring buffer surfaced in the debug panel. Also echoed to the console with a
+// styled badge (%c) so app logs stand out from library noise in devtools.
 const LOG_BADGE = "background:oklch(76% 0.14 32);color:#181016;padding:1px 6px;border-radius:4px;font-weight:700";
 export function logEvent(level: LogEntry["level"], msg: string) {
   (level === "error" ? console.error : level === "warn" ? console.warn : console.info)("%cAUTOMO%c " + msg, LOG_BADGE, "");
@@ -128,7 +128,7 @@ export function setOnboarding(v: boolean) { set({ onboarding: v }); }
 export function setProfileName(v: string) { set({ profileName: v }); }
 export function setPlan(v: PlanStep[]) { set({ plan: v }); }
 
-// upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
+// Upsert MCP task status, keyed by server+tool, for the debug panel's background-task view.
 export function updateTask(server: string, tool: string, status: string) {
   const key = server + "/" + tool;
   const rest = state.tasks.filter((t) => t.server + "/" + t.tool !== key);
@@ -140,7 +140,7 @@ export function setCap(key: "model" | "bridge" | "files", dot: string, text: str
   set({ caps: { ...state.caps, [key]: { dot, text } } });
 }
 
-// ---- settings: localStorage-backed, read/written directly (not reactive) ----
+// Settings — localStorage-backed, read/written directly (not part of the reactive store).
 export const S = {
   get url() { return localStorage.getItem("automo.url") || "http://localhost:11434"; },
   set url(v: string) { localStorage.setItem("automo.url", v); },
@@ -158,18 +158,17 @@ export const S = {
   set instructions(v: string) { localStorage.setItem("automo.instructions", v); },
   get bridgeToken() { return localStorage.getItem("automo.bridgeToken") || "dev"; },
   set bridgeToken(v: string) { localStorage.setItem("automo.bridgeToken", v || "dev"); },
-  // inference backend selection
   get provider() { return (localStorage.getItem("automo.provider") || "ollama") as "ollama" | "vllm" | "huggingface" | "browser" | "webllm"; },
   set provider(v: string) { localStorage.setItem("automo.provider", v); },
   get vllmUrl() { return localStorage.getItem("automo.vllmUrl") || "http://localhost:8000"; },
   set vllmUrl(v: string) { localStorage.setItem("automo.vllmUrl", v); },
   get hfToken() { return localStorage.getItem("automo.hfToken") || ""; },
   set hfToken(v: string) { localStorage.setItem("automo.hfToken", v); },
-  // sandbox backend: "bridge" (real Unix on your machine via the daemon) or "inbrowser" (Pyodide +
-  // just-bash + isomorphic-git in the page — zero install, sandboxed, can't touch real host files).
+  // Sandbox backend: "bridge" (real Unix via the daemon) or "inbrowser" (Pyodide + bash + git in the
+  // page — sandboxed, cannot reach host files).
   get sandbox() { return (localStorage.getItem("automo.sandbox") || "bridge") as "bridge" | "inbrowser"; },
   set sandbox(v: string) { localStorage.setItem("automo.sandbox", v); },
-  // autonomous mode: run queued/scheduled tasks on their own (opt-in; off by default).
+  // Autonomous mode — run queued/scheduled tasks unattended (opt-in; off by default).
   get autonomous() { return localStorage.getItem("automo.autonomous") === "1"; },
   set autonomous(v: boolean) { localStorage.setItem("automo.autonomous", v ? "1" : "0"); },
 };

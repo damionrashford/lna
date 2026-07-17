@@ -1,10 +1,10 @@
 // web_search — a DuckDuckGo HTML-scraping tool for the SandboxAgent.
 //
-// DuckDuckGo's html/lite endpoints send no CORS headers, so a plain browser fetch can't read
-// them. The tool tries several routes and uses whichever works:
+// DuckDuckGo's html/lite endpoints send no CORS headers, so a plain browser fetch can't read them.
+// The tool tries several routes and uses whichever works:
 //   1. CORS proxies from the browser — corsproxy.io, then allorigins (raw + JSON). No bridge needed.
 //   2. the live sandbox `curl` (user's machine, no CORS) as a fallback when a session is running.
-// DDG rate-limits scraping, so we also fall back from the html endpoint to the lighter lite one.
+// DDG rate-limits scraping, so it also falls back from the html endpoint to the lighter lite one.
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import { S } from "../../store";
@@ -55,9 +55,9 @@ export function parseDdgLite(html: string, max = 6): SearchResult[] {
   return out;
 }
 
-// CORS proxies that let a browser read a cross-origin page. allorigins /get (JSON) is the one
-// that actually works today — verified returning DDG results from a real browser Origin;
-// corsproxy.io now 403s without a paid key and allorigins /raw fails CORS, kept only as fallbacks.
+// CORS proxies that let a browser read a cross-origin page. allorigins /get (JSON) is the one that
+// currently works; corsproxy.io now 403s without a paid key and allorigins /raw fails CORS — both kept
+// only as fallbacks.
 const PROXIES: ((u: string) => { url: string; json?: boolean })[] = [
   (u) => ({ url: `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, json: true }),
   (u) => ({ url: `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` }),

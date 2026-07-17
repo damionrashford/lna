@@ -1,5 +1,5 @@
-// node:crypto shim — browser WebCrypto covers the bits stdio MCP servers use (randomUUID,
-// getRandomValues, subtle). Ported from gh-pages-react/shims.
+// node:crypto shim — browser WebCrypto covers the surface stdio MCP servers use (randomUUID,
+// getRandomValues, subtle).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const c: any = (globalThis as any).crypto;
 export const randomUUID = () => c.randomUUID();

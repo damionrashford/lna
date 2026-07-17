@@ -19,7 +19,7 @@ export default function Composer() {
   const autosize = () => { const i = ta.current; if (!i) return; i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 180) + "px"; };
   useEffect(autosize, [value]);
 
-  // content shared/opened into the installed PWA (Share Target / File Handlers) → prefill the composer
+  // Content shared into the installed PWA (Share Target / File Handlers) prefills the composer.
   useEffect(() => { if (intake) { setValue((v) => (v ? v + "\n" + intake : intake)); setIntake(null); ta.current?.focus(); } }, [intake]);
 
   const submit = () => {
@@ -32,7 +32,7 @@ export default function Composer() {
     else sendText(v);
   };
 
-  // paste / drop images anywhere → attachment
+  // Paste an image anywhere in the window to attach it.
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));

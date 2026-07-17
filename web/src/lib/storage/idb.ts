@@ -1,4 +1,4 @@
-// tiny IndexedDB kv: persists the folder handle, sessions, and snapshots across reloads
+// Minimal IndexedDB key/value store: persists the folder handle, sessions, and snapshots across reloads.
 function idb(): Promise<IDBDatabase> {
   return new Promise((res, rej) => {
     const r = indexedDB.open("automo", 1);

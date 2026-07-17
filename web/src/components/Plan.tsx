@@ -1,7 +1,6 @@
 import { useStore } from "../store";
 
-// Live view of the agent's plan (the update_plan tool writes store.plan). Shows only while a plan
-// exists; a finished/cleared plan hides itself. Each step shows its state at a glance.
+// Live view of the agent's plan; the update_plan tool writes store.plan. Hidden when the plan is empty.
 const MARK = { completed: "✓", in_progress: "▸", pending: "○" } as const;
 
 export default function Plan() {

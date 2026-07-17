@@ -1,6 +1,5 @@
 // PCM helpers for the voice pipeline. Everything is signed 16-bit little-endian mono PCM. Whisper (STT)
-// consumes 16 kHz; Kokoro (TTS) emits 24 kHz. Ported from voice-box/src/audio/pcm.ts (pure, framework-
-// agnostic) with two browser-playback additions (pcm16ToFloat32, downsampleTo16k).
+// consumes 16 kHz; Kokoro (TTS) emits 24 kHz.
 
 // Kokoro Float32 (-1..1) → Int16 LE PCM.
 export function floatToPcm16(f32: Float32Array): Int16Array {
@@ -32,7 +31,6 @@ export function rms(pcm: Int16Array): number {
   return Math.sqrt(sum / pcm.length);
 }
 
-// Concatenate int16 chunks into one buffer.
 export function concatPcm(chunks: Int16Array[]): Int16Array {
   let len = 0;
   for (const c of chunks) len += c.length;

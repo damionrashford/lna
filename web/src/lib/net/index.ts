@@ -1,19 +1,22 @@
-// fetch with the LNA loopback hint, plus address-space classification and a bridge liveness probe.
+// fetch with the Local Network Access loopback hint, plus address-space classification and a bridge
+// liveness probe.
 import { trimUrl, setCap } from "../../store";
 
+// Chrome's Local Network Access gating requires the `targetAddressSpace: "loopback"` hint for a public
+// HTTPS page to reach localhost; fall back to a plain fetch where the option is unsupported.
 export function localFetch(url: string, opts: RequestInit = {}): Promise<Response> {
   try { return fetch(url, { ...opts, targetAddressSpace: "loopback" } as RequestInit); }
   catch { return fetch(url, opts); }
 }
 
-// no-cors reachability: resolves (opaque) if Ollama answers + LNA is granted, even when CORS blocks the read.
+// no-cors reachability: resolves (opaque) if Ollama answers and LNA is granted, even when CORS blocks the read.
 export async function probeReachable(): Promise<boolean> {
   try { await localFetch(trimUrl() + "/api/version", { mode: "no-cors" }); return true; }
   catch { return false; }
 }
 
-// ping the local bridge daemon's HTTP root and reflect its liveness in the "bridge" capability dot.
-// (The agent's real shell/filesystem run through the SDK's SandboxAgent capabilities, not this.)
+// Ping the local bridge daemon's HTTP root and reflect its liveness in the "bridge" capability dot.
+// The agent's real shell/filesystem run through the SDK's SandboxAgent capabilities, not this probe.
 export async function probeBridge() {
   try {
     const res = await localFetch("http://localhost:7967/", { method: "GET" });
@@ -22,8 +25,8 @@ export async function probeBridge() {
   setCap("bridge", "", "not running");
 }
 
-// ask the bridge for exact host hardware (RAM/VRAM/chip) to refine the browser's coarse recommendation.
-// Returns null when the bridge isn't running — detection then stays at the WebGPU-derived estimate.
+// Ask the bridge for exact host hardware (RAM/VRAM/chip) to refine the browser's coarse recommendation.
+// Returns null when the bridge isn't running; detection then stays at the WebGPU-derived estimate.
 export async function probeBridgeHardware(): Promise<any | null> {
   try {
     const res = await localFetch("http://localhost:7967/hw", { method: "GET" });
@@ -32,7 +35,7 @@ export async function probeBridgeHardware(): Promise<any | null> {
   return null;
 }
 
-// classify a URL's target address space (loopback / local LAN) for LNA-hinted fetches
+// Classify a URL's target address space (loopback / local LAN) for LNA-hinted fetches.
 export function spaceFor(url: string): "loopback" | "local" | null {
   try {
     const h = new URL(url).hostname;

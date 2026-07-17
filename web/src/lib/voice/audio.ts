@@ -1,9 +1,9 @@
-// Browser audio I/O for the voice stack. Two halves:
-//   capture — getUserMedia → an inline AudioWorklet (Blob URL, no separate asset) posts mic frames to the
-//     main thread, which downsamples to 16 kHz Int16 and runs an energy VAD (RMS thresholds ported from
-//     voice-box config). A completed utterance (speech long enough, then silence) fires onUtterance.
-//   playback — a gapless queue of 24 kHz Int16 PCM (Kokoro output) scheduled on an AudioContext; stop()
-//     flushes it for barge-in.
+// Browser audio I/O for the voice stack.
+//   capture — getUserMedia -> inline AudioWorklet (Blob URL, no separate asset) posts mic frames to the
+//     main thread, which downsamples to 16 kHz Int16 and runs an energy VAD. A completed utterance
+//     (speech long enough, then silence) fires onUtterance.
+//   playback — gapless queue of 24 kHz Int16 PCM scheduled on an AudioContext; stop() flushes it for
+//     barge-in.
 import { rms, downsampleTo16k, concatPcm, pcm16ToFloat32 } from "./pcm";
 import type { VoiceConfig } from "./config";
 
@@ -96,6 +96,6 @@ export class VoiceAudio {
     this.#cursor = this.#playCtx?.currentTime ?? 0;
   }
 
-  // helper so the transport can push its buffered frames (unused path; capture emits whole utterances)
+  // Buffer-concatenation helper for the transport; unused since capture emits whole utterances.
   static merge(chunks: Int16Array[]): Int16Array { return concatPcm(chunks); }
 }

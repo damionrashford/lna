@@ -3,7 +3,7 @@ import { useApprovals, resolveApproval, resolveElicitation, type PendingItem } f
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Renders a JSON-Schema (primitive) elicitation request as a real form → accept(content)/decline/cancel.
+// Renders a primitive JSON-Schema elicitation request as a form (accept/decline/cancel).
 function ElicitationForm({ item }: { item: PendingItem }) {
   const props: Record<string, any> = item.schema?.properties ?? {};
   const required: string[] = item.schema?.required ?? [];
@@ -18,9 +18,8 @@ function ElicitationForm({ item }: { item: PendingItem }) {
     return init;
   });
   const set = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }));
-  // Coerce a form value to its schema type. MCP elicitation is spec-limited to primitives, but a
-  // non-conforming server may send array/object — parse those from a list / JSON textarea rather than
-  // shipping the raw string (or rendering nothing).
+  // Coerce a form value to its schema type. Elicitation is spec-limited to primitives, but a
+  // non-conforming server may send array/object; parse those from the list / JSON textarea.
   const coerce = (p: any, v: any) => {
     if (v === "" || v == null) return v;
     if (p.type === "number" || p.type === "integer") return Number(v);
@@ -83,7 +82,7 @@ function ElicitationForm({ item }: { item: PendingItem }) {
   );
 }
 
-// Human-in-the-loop: tool-approval pauses + MCP elicitation input requests, one surface.
+// Human-in-the-loop surface: tool-approval pauses and elicitation input requests.
 export default function Approvals() {
   const pending = useApprovals();
   if (!pending.length) return null;

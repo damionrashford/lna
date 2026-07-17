@@ -1,10 +1,8 @@
-// Browser STT — Whisper via transformers.js (@huggingface/transformers), ONNX Runtime Web on WebGPU
-// (WASM fallback). Replaces voice-box's nodejs-whisper (which shells out to whisper.cpp) with a fully
-// in-browser pipeline. Same contract the transport expects: transcribe(16 kHz mono Int16) → clean text.
+// Browser STT — Whisper via transformers.js (ONNX Runtime Web, WebGPU with WASM fallback).
+// Contract: transcribe(16 kHz mono Int16) -> clean text.
 //
-// The heavy dep is a runtime-resolved dynamic import (variable specifier) so this module bundles WITHOUT
-// `@huggingface/transformers`; add it to actually run. API grounded in the transformers.js v3 ASR docs
-// (pipeline "automatic-speech-recognition", Float32 @ 16 kHz input, {device, dtype}).
+// `@huggingface/transformers` is a runtime-resolved dynamic import (variable specifier) so this module
+// bundles without the dep; it must be installed to run.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { pcm16ToFloat32 } from "./pcm";
 

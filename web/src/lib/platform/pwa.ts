@@ -1,14 +1,14 @@
 // PWA integration: consume content the OS hands an installed AUTOMO — Web Share Target (shared
 // title/text/url arrive as query params), File Handlers (files opened "with AUTOMO" via the Launch
 // Queue), the web+automo:// protocol, and the "New chat" shortcut — plus capture the install prompt.
-// Patterns from PWA-LAB. Anything ingested lands in store.intake and prefills the composer.
+// Anything ingested lands in store.intake and prefills the composer.
 import { setIntake, setCanInstall, logEvent } from "../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let deferredPrompt: any = null;
 
 export function initPwa(): void {
-  // capture the install prompt so we can offer an in-app Install button (Chromium)
+  // capture the install prompt to offer an in-app Install button (Chromium)
   window.addEventListener("beforeinstallprompt", (e: any) => { e.preventDefault(); deferredPrompt = e; setCanInstall(true); });
   window.addEventListener("appinstalled", () => { deferredPrompt = null; setCanInstall(false); logEvent("info", "AUTOMO installed"); });
 

@@ -1,5 +1,4 @@
-// node:zlib shim = fflate, wrapped so results are Node Buffers (server code does .toString()).
-// Ported from gh-pages-react/shims.
+// node:zlib shim backed by fflate, wrapped so results are Node Buffers (server code calls .toString()).
 import { gunzipSync as fg, gzipSync as fz, inflateSync as fi, deflateSync as fd } from "fflate";
 import { Buffer } from "buffer";
 

@@ -1,16 +1,15 @@
-// Client-side context compaction. Our Ollama shim names the model class `ChatCompletions`, which
-// disables the SDK's server-side compaction (its samplingParams returns {}). So we do it here: when the
-// conversation grows past a character budget, summarize the older turns into ONE structured note
-// (a Goal/Constraints/Progress handoff template) and keep the recent turns verbatim. Runs on the user's
-// local model over LNA. Best-effort — returns null to leave history as-is.
+// Client-side context compaction. The non-native `ChatCompletions` model shim disables the SDK's
+// server-side compaction (its samplingParams returns {}), so compaction runs here: past a character
+// budget, older turns collapse into one structured handoff note and recent turns stay verbatim. Runs on
+// the user's model over LNA. Best-effort — returns null to leave history as-is.
 import { Agent, run } from "@openai/agents";
 import { logEvent } from "../../../store";
 import { installModelProvider } from "../model/model";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const CONTEXT_BUDGET = 48000;                                 // ~ the working-context ceiling in chars
-const COMPACT_TRIGGER = Math.floor(CONTEXT_BUDGET * 0.7);     // compact PROACTIVELY at 70% — before a turn
-                                                             // can overflow the window, not at the brink
+const COMPACT_TRIGGER = Math.floor(CONTEXT_BUDGET * 0.7);     // compact at 70%, before a turn can overflow
+                                                             // the window rather than at the brink
 const KEEP_RECENT = 6;                                        // turns kept verbatim after the summary
 
 const textOf = (m: any) => (m.parts || []).filter((p: any) => p.type === "text" || p.type === "reasoning").map((p: any) => p.text).join(" ");
@@ -34,7 +33,7 @@ export async function maybeCompact(messages: any[], model: string): Promise<any[
   const tail = messages.slice(-KEEP_RECENT);
   const transcript = head.map((m) => `${m.role}: ${textOf(m).slice(0, 4000)}`).join("\n\n").slice(0, 40000);
   try {
-    installModelProvider(model); // summarize through the one brain (the user's configured provider)
+    installModelProvider(model); // summarize through the user's configured provider
     const summarizer = new Agent({ name: "compactor", model, instructions: SUMMARY_PROMPT });
     const res: any = await run(summarizer, transcript, { maxTurns: 1 } as any);
     const summary = (typeof res.finalOutput === "string" ? res.finalOutput : JSON.stringify(res.finalOutput ?? "")).trim();

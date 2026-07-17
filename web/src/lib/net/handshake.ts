@@ -1,7 +1,7 @@
-// Bridge auth handshake (browser side). The bridge issues a per-connection nonce; we prove we know
-// the shared token by returning HMAC-SHA256(token, nonce) instead of the token itself — so the
-// secret never crosses the wire and a captured handshake can't be replayed on a new connection.
-// Uses the Web Crypto SubtleCrypto API (secure-context; the page is HTTPS).
+// Bridge auth handshake (browser side). The bridge issues a per-connection nonce; the client proves it
+// knows the shared token by returning HMAC-SHA256(token, nonce) rather than the token itself, so the
+// secret never crosses the wire and a captured handshake cannot be replayed on a new connection.
+// Uses Web Crypto SubtleCrypto (requires a secure context).
 export async function hmacHex(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -14,8 +14,8 @@ export async function hmacHex(secret: string, message: string): Promise<string> 
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// The auth frame to send in response to the bridge's hello. Falls back to the plaintext token when
-// an older bridge sends no nonce, so a stale cached page still connects.
+// The auth frame sent in response to the bridge's hello. Falls back to the plaintext token when an
+// older bridge sends no nonce, so a stale cached page still connects.
 export async function authFrame(token: string, nonce: unknown): Promise<string> {
   return typeof nonce === "string" && nonce
     ? JSON.stringify({ type: "auth", hmac: await hmacHex(token, nonce) })

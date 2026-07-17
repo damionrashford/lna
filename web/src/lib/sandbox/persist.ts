@@ -1,15 +1,15 @@
-// Workspace linkage — connects the REAL sandbox workspace (hosted by the bridge, on the machine's
-// disk) to two browser-side stores, over the SDK's persist/hydrate + exec/readFile seam:
-//   1. OPFS — a gzip'd tar cached per session, so the sandbox survives reloads without a snapshot
-//      ritual (durable, invisible). Uses the Compression Streams API; no dependencies.
-//   2. a granted folder (File System Access) — a live mirror of the workspace files onto real disk,
-//      so you can open and edit what the agent made in Finder. Written under <folder>/workspace/.
+// Workspace linkage — connects the sandbox workspace (hosted by the bridge, on the machine's disk) to
+// two browser-side stores, over the SDK's persist/hydrate + exec/readFile seam:
+//   1. OPFS — a gzip'd tar cached per session, so the sandbox survives reloads without an explicit
+//      snapshot step. Uses the Compression Streams API; no dependencies.
+//   2. A granted folder (File System Access) — a live mirror of the workspace files onto real disk,
+//      so the agent's output is editable in the OS file browser. Written under <folder>/workspace/.
 // OPFS is browser-origin-private (never touches real disk); the folder is the only real-disk path.
 import { opfsRoot, resolvePath, getFsRoot, walk } from "../storage/opfs";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// ---- gzip via the Compression Streams API (stable, worker-safe, no deps) ----
+// gzip via the Compression Streams API (worker-safe, no deps).
 async function gzip(data: Uint8Array): Promise<Uint8Array> {
   const cs = new CompressionStream("gzip");
   const stream = new Blob([data as any]).stream().pipeThrough(cs);
@@ -21,7 +21,7 @@ async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-// ---- OPFS byte I/O ----
+// OPFS byte I/O.
 async function opfsPutBytes(path: string, bytes: Uint8Array) {
   const { dir, file } = await resolvePath(await opfsRoot(), path, true);
   const fh = await dir.getFileHandle(file, { create: true });
@@ -38,7 +38,7 @@ async function opfsGetBytes(path: string): Promise<Uint8Array | null> {
 const cachePath = (sid: string) => `workspaces/${sid}.tar.gz`;
 
 // Ask the browser to keep OPFS/IndexedDB from being evicted under storage pressure.
-// (StorageManager.persist — secure-context; best-effort, some browsers auto-grant.)
+// StorageManager.persist is secure-context and best-effort; some browsers auto-grant.
 export async function requestDurable(): Promise<boolean> {
   try {
     if (await navigator.storage?.persisted?.()) return true;
@@ -46,7 +46,7 @@ export async function requestDurable(): Promise<boolean> {
   } catch { return false; }
 }
 
-// persist the live sandbox workspace → gzip'd tar in OPFS, keyed by session id.
+// Persist the live sandbox workspace to a gzip'd tar in OPFS, keyed by session id.
 export async function cacheWorkspace(sid: string, session: any): Promise<void> {
   if (!sid || !session?.persistWorkspace) return;
   try {
@@ -55,7 +55,7 @@ export async function cacheWorkspace(sid: string, session: any): Promise<void> {
   } catch { /* best-effort — bridge may be down or workspace empty */ }
 }
 
-// hydrate a fresh sandbox session from this session's OPFS cache, if any. Returns true if applied.
+// Hydrate a fresh sandbox session from this session's OPFS cache, if any. Returns true if applied.
 export async function hydrateWorkspaceFromCache(sid: string, session: any): Promise<boolean> {
   if (!sid || !session?.hydrateWorkspace) return false;
   try {
@@ -70,12 +70,12 @@ export async function dropWorkspaceCache(sid: string): Promise<void> {
   try { const { dir, file } = await resolvePath(await opfsRoot(), cachePath(sid)); await dir.removeEntry(file); } catch { /* nothing cached */ }
 }
 
-// Mirror the live sandbox workspace onto the granted folder, under <folder>/workspace/, so the
-// agent's files are visible/editable on real disk. One-way (sandbox → folder), best-effort, capped.
+// Mirror the live sandbox workspace onto the granted folder, under <folder>/workspace/, so the agent's
+// files are editable on real disk. One-way (sandbox → folder), best-effort, capped.
 const MIRROR_SUBDIR = "workspace";
 const MIRROR_MAX_FILES = 2000;
 
-// Suppress the folder observer while WE are writing the mirror, so exporting doesn't trigger an
+// Suppress the folder observer while this code is writing the mirror, so an export doesn't trigger an
 // import that re-triggers an export (feedback loop). performance.now() is monotonic and cheap.
 let suppressObserverUntil = 0;
 const suppressed = () => performance.now() < suppressObserverUntil;
@@ -93,8 +93,8 @@ export async function mirrorToFolder(session: any): Promise<number> {
     });
     rels = String(res?.stdout || "").split("\n").map((s) => s.replace(/^\.\//, "").trim()).filter(Boolean);
   } catch { return 0; }
-  // Prune the previous mirror so files the agent deleted don't linger on disk — the folder should
-  // track the workspace, not accumulate. removeEntry(recursive) is a no-op the first time.
+  // Prune the previous mirror so files the agent deleted don't linger on disk; the folder should track
+  // the workspace, not accumulate. removeEntry(recursive) is a no-op the first time.
   try { await (root as any).removeEntry(MIRROR_SUBDIR, { recursive: true }); } catch { /* nothing to prune */ }
   let n = 0;
   for (const rel of rels) {
@@ -114,9 +114,9 @@ const tryUtf8 = (buf: Uint8Array): string | null => {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch { return null; }
 };
 
-// Import the folder's <folder>/workspace/ mirror back INTO the sandbox: text files become inline
-// `file` manifest entries via materializeEntry (JSON-safe over the bridge). Binary is skipped (it
-// can't cross the JSON WebSocket). Best-effort; returns the number of files written.
+// Import the folder's <folder>/workspace/ mirror back into the sandbox: text files become inline
+// `file` manifest entries via materializeEntry (JSON-safe over the bridge). Binary is skipped since it
+// can't cross the JSON WebSocket. Best-effort; returns the number of files written.
 export async function importFromFolder(session: any): Promise<number> {
   const root = getFsRoot();
   if (!root || !session?.materializeEntry) return 0;
@@ -137,8 +137,8 @@ export async function importFromFolder(session: any): Promise<number> {
 }
 
 // FileSystemObserver — auto-import external edits to the granted folder back into the sandbox.
-// EXPERIMENTAL, non-standard, Chromium-only: feature-detected and entirely optional. The suppression
-// window keeps our own mirror writes from triggering an import→export feedback loop.
+// Experimental, non-standard, Chromium-only: feature-detected and entirely optional. The suppression
+// window keeps this code's own mirror writes from triggering an import→export feedback loop.
 let observer: any = null;
 export function startFolderObserver(session: any): void {
   const root = getFsRoot();
