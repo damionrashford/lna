@@ -24,3 +24,14 @@ export function releaseSandboxLock(): void {
   release?.();
   release = null;
 }
+
+// Run `fn` only if this tab can grab the loop-leader lock (held just for fn's duration). A second tab
+// that can't get it skips — so the autonomous task queue is drained by exactly one tab at a time.
+// Returns fn's result, or null when another tab is the leader.
+export async function runAsLeader<T>(fn: () => Promise<T>): Promise<T | null> {
+  if (!(navigator as any).locks) return fn(); // single-tab assumption without Web Locks
+  return (navigator as any).locks.request("automo-loop-leader", { ifAvailable: true }, async (lock: any) => {
+    if (!lock) return null; // another tab is the leader this tick
+    return fn();
+  }).catch(() => null);
+}
