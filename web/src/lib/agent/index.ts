@@ -155,6 +155,8 @@ export async function boot() {
   const { initTabs } = await import("../platform/tabs");
   const { initPwa } = await import("../platform/pwa");
   setStatus("", "not connected");
+  const { installObservability } = await import("../runtime/context/trace");
+  installObservability(); // SDK tracing → rich console + debug panel (chat + autonomous runs)
   // local profile → show the warm first-run welcome once (non-blocking), mirror the name for the greeting
   const { getProfile } = await import("../runtime/context/profile");
   const prof = getProfile();

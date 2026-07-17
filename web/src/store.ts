@@ -112,9 +112,11 @@ export function moveThreadToEnd(id: string) {
   set({ thread: [...state.thread.filter((t) => t.id !== id), item] });
 }
 
-// structured run log — a capped ring buffer surfaced in the debug panel; also echoed to the console.
+// structured run log — a capped ring buffer surfaced in the debug panel; also echoed to the console with a
+// styled AUTOMO badge (%c) so app logs stand out from library noise in devtools.
+const LOG_BADGE = "background:oklch(76% 0.14 32);color:#181016;padding:1px 6px;border-radius:4px;font-weight:700";
 export function logEvent(level: LogEntry["level"], msg: string) {
-  (level === "error" ? console.error : level === "warn" ? console.warn : console.info)(`[automo] ${msg}`);
+  (level === "error" ? console.error : level === "warn" ? console.warn : console.info)("%cAUTOMO%c " + msg, LOG_BADGE, "");
   set({ logs: [...state.logs.slice(-199), { t: Date.now(), level, msg }] });
 }
 export function setUsage(u: Usage | null) { set({ usage: u }); }

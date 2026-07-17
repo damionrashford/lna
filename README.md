@@ -8,7 +8,7 @@
 
 A static web page that _is_ an agent: hosted UI, local everything else — your model, your files, your shell. Nothing leaves your machine.
 
-[**▶ Live demo**](https://damionrashford.github.io/lna/) · [Architecture](#-how-it-fits-together) · [Quickstart](#-quickstart) · [Develop](#-develop)
+[**▶ Launch AUTOMO**](https://damionrashford.github.io/lna/) · [Architecture](#-how-it-fits-together) · [Quickstart](#-quickstart) · [Develop](#-develop)
 
 [![Deploy](https://github.com/damionrashford/lna/actions/workflows/pages.yml/badge.svg)](https://github.com/damionrashford/lna/actions/workflows/pages.yml)
 [![Tests](https://github.com/damionrashford/lna/actions/workflows/e2e.yml/badge.svg)](https://github.com/damionrashford/lna/actions/workflows/e2e.yml)
@@ -55,7 +55,7 @@ OLLAMA_ORIGINS='https://damionrashford.github.io' ollama serve
 ollama pull llama3.2
 ```
 
-3. Open the [**live demo**](https://damionrashford.github.io/lna/), click **Connect**, and grant Chrome's local-network prompt.
+3. Open [**AUTOMO**](https://damionrashford.github.io/lna/), click **Connect**, and grant Chrome's local-network prompt.
 
 > [!TIP]
 > No install at all? Switch **Settings → Sandbox** to _in-browser_ and pick a **WebGPU** model — you get shell, files, git, and inference entirely in the page, no Ollama, no daemon.

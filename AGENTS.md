@@ -63,6 +63,7 @@ lna/
 - **Human-in-the-loop** (`transport.ts` + `hitl/approvals.ts`): tools with `needsApproval` pause the run (`result.interruptions`); the transport wraps the pause→approve→resume loop in one `createUIMessageStream` (`writer.merge` per run), then `state.approve/reject` and resumes from `result.state` — all within one streamed chat turn.
 - **Guardrails** (`context/guardrails.ts`): agent + tool guardrails on `web_search`, gated on the `guardrails` setting. Focused on credential safety.
 - **Personalization** (`context/profile.ts` + `Onboarding.tsx`): one local profile per browser (name/focus/tone, `automo.profile` in localStorage), captured by a non-blocking first-run overlay and folded into the agent's instructions.
+- **Observability** (`runtime/context/trace.ts`): `installObservability()` replaces the SDK's default (OpenAI-hosted) trace processor with a local one — buffers each run's span tree (agent → generation → tool → guardrail) and renders it with the console group/table API (only while the debug panel is open) plus a one-line summary in the debug log. `logEvent` carries a `%c` AUTOMO badge. Per-turn token usage from `RunContext.usage`.
 - **Sessions & snapshots**: multi-conversation history (IndexedDB, UIMessages); snapshots persist the real sandbox workspace (`persistWorkspace` tar) + conversation.
 
 ## The bridge (`servers/bridge.ts`)
