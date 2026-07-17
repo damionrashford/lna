@@ -9,7 +9,7 @@
 import type { Model, ModelRequest, ModelResponse, StreamEvent, AgentOutputItem } from "@openai/agents";
 import { Usage } from "@openai/agents";
 import { createBrowserEngine, createWebllmEngine, type BrowserEngine } from "@automo/inference";
-import { logEvent } from "../../store";
+import { logEvent } from "../../../store";
 
 export type BrowserEngineKind = "transformers" | "webllm";
 

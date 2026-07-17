@@ -2,11 +2,15 @@
 // and buildAgent() which assembles the full capability set. transport.ts runs the returned agent.
 import { Manifest, SandboxAgent, shell, filesystem, skills, memory, compaction, gitRepo } from "@openai/agents/sandbox";
 import { S } from "../../store";
-import type { AutomoContext } from "../runtime/context";
+import type { AutomoContext } from "../runtime/context/run-context";
 import { activeMcpServers } from "../mcp/index";
 import { webSearchTool, readUrlTool } from "../tools/search";
-import { agentInputGuardrails, agentOutputGuardrails } from "../runtime/guardrails";
-import { personalize } from "../runtime/profile";
+import { planTool } from "../tools/plan";
+import { scheduleTool } from "../tools/schedule";
+import { subagentTool } from "../tools/subagent";
+import { SKILLS_INDEX } from "./skills.generated";
+import { agentInputGuardrails, agentOutputGuardrails } from "../runtime/context/guardrails";
+import { personalize } from "../runtime/context/profile";
 
 const DEFAULT_INSTRUCTIONS = `You are AUTOMO, a local-first AI assistant running in the user's browser, connected to their own machine over Local Network Access. You operate a real Unix sandbox on their machine:
 - shell (exec_command): run commands in the workspace.
@@ -34,7 +38,7 @@ export function buildAgent(modelOverride?: string): SandboxAgent<AutomoContext> 
     model,
     instructions: (rc) => buildInstructions(rc.context),
     defaultManifest: new Manifest({ entries: {} }),
-    tools: [webSearchTool, readUrlTool],
+    tools: [webSearchTool, readUrlTool, planTool, scheduleTool, subagentTool],
     // connected MCP servers become the agent's tools (SDK owns exposure); server-prefixed names avoid
     // collisions across servers. This is the real fix for the previously orphaned MCP tool path.
     mcpServers: activeMcpServers(),
@@ -47,7 +51,9 @@ export function buildAgent(modelOverride?: string): SandboxAgent<AutomoContext> 
       skills({
         lazyFrom: {
           source: gitRepo({ host: "github.com", repo: "damionrashford/lna", ref: "main", subpath: ".agents/skills" }),
-          index: [{ name: "sum-writer", description: "Compute a sum and write it to a file (from the lna repo)." }],
+          // generated from ../.agents/skills/*/SKILL.md at build time (web/gen-skills-index.ts) — a remote
+          // gitRepo can't be enumerated client-side, so the index is precomputed, never hand-maintained.
+          index: SKILLS_INDEX,
         },
       }),
       memory({ generate: { phaseOneModel: model, phaseTwoModel: model } }),

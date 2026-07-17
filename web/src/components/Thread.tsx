@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAutomoChat } from "../chat";
 import Approvals from "./Approvals";
+import Plan from "./Plan";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function argsPreview(input: any): string {
@@ -54,6 +55,7 @@ export default function Thread() {
   useEffect(() => { const mn = ref.current?.closest("main"); if (mn) mn.scrollTop = mn.scrollHeight; }, [messages, status]);
   return (
     <div className="thread" ref={ref}>
+      <Plan />
       {messages.map((m) => <Message key={m.id} m={m} />)}
       <Approvals />
       {status === "submitted" && (

@@ -7,7 +7,7 @@
 import { RealtimeAgent, RealtimeSession } from "@openai/agents-realtime";
 import { S, pushThread, patchThread, logEvent, setVoice } from "../../store";
 import { webSearchTool } from "../tools/search";
-import { installModelProvider } from "../runtime/model";
+import { installModelProvider } from "../runtime/model/model";
 import { loadVoiceConfig } from "./config";
 import { LocalRealtimeTransport } from "./transport";
 import { VoiceAudio } from "./audio";

@@ -8,6 +8,7 @@
 //   3. env still overrides everything: SITE_ORIGIN and/or PUBLIC_PATH.
 import tailwind from "bun-plugin-tailwind";
 import { reactCompiler } from "./react-compiler-plugin";
+import { writeSkillsIndex } from "./gen-skills-index";
 import { cp } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -86,6 +87,9 @@ const OPTIONAL_DEPS = [
 const isInstalled = (pkg: string): boolean => { try { (Bun as any).resolveSync(pkg, import.meta.dir); return true; } catch { return false; } };
 const externalDeps = OPTIONAL_DEPS.filter((p) => !isInstalled(p));
 if (externalDeps.length) console.log(`optional deps not installed (externalized): ${externalDeps.join(", ")}`);
+
+// regenerate the lazy-skills index from ../.agents/skills so the bundle can't ship a stale one
+console.log(`gen skills index: ${writeSkillsIndex()} skill(s) → src/lib/agent/skills.generated.ts`);
 
 const result = await Bun.build({
   entrypoints: ["./index.html"],
@@ -228,6 +232,16 @@ self.addEventListener("backgroundfetchsuccess", (e) => {
   })());
 });
 self.addEventListener("backgroundfetchclick", (e) => { e.waitUntil(self.clients.openWindow(NAV_FALLBACK)); });
+// Best-effort autonomous drain: the SW can't run the agent (it needs the page's model), so on a background
+// wake it just pokes any open client to pump its task queue. periodicSync is Chromium + installed-PWA +
+// permission-gated; sync is a one-shot fallback; a message lets the page ask for an immediate broadcast.
+async function drainClients() {
+  const cs = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const c of cs) c.postMessage({ type: "automo-drain" });
+}
+self.addEventListener("periodicsync", (e) => { if (e.tag === "automo-drain") e.waitUntil(drainClients()); });
+self.addEventListener("sync", (e) => { if (e.tag === "automo-drain") e.waitUntil(drainClients()); });
+self.addEventListener("message", (e) => { if (e.data && e.data.type === "automo-drain-ping") e.waitUntil(drainClients()); });
 `;
 await Bun.write("./dist/sw.js", sw);
 console.log(`wrote dist/sw.js (precache ${shell.length} entries, cache ${version})`);

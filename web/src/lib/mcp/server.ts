@@ -18,6 +18,8 @@ import { requestElicitation } from "../hitl/approvals";
 import { currentRoots } from "../sandbox/roots";
 import { S, logEvent, updateTask } from "../../store";
 import { InPageStdioTransport } from "./inpage";
+import { getCurrentTaskId } from "../runtime/autonomy/current";
+import { appendEvent, updateTask as updateAutonomyTask } from "../runtime/autonomy/tasks";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -121,12 +123,18 @@ export class SdkMcpServer {
     // Long-running tools: run as a task and poll to completion via the SDK's task stream, surfacing
     // status to the UI, then return the final result — background processing without blocking.
     if (taskSupport === "required" || taskSupport === "optional") {
+      // If an autonomous task triggered this call, mirror the MCP Task's status stream into that durable
+      // task's event log + note — the related-task link, in reverse: a long-running MCP tool's progress
+      // becomes visible on the autonomy task that's awaiting it. No-op during interactive chat (id null).
+      const autoId = getCurrentTaskId();
+      const mirror = (status: string) => { if (autoId) { void appendEvent(autoId, "tool", `${this.name}/${toolName}: ${status}`); void updateAutonomyTask(autoId, { note: `mcp ${toolName}: ${status}` }); } };
       const stream = (this.client as any).experimental.tasks.callToolStream({ name: toolName, arguments: (args || {}) as any });
       for await (const msg of stream as AsyncIterable<any>) {
-        if (msg.type === "result") { updateTask(this.name, toolName, "completed"); return msg.result?.content ?? msg.result; }
-        if (msg.type === "error") { updateTask(this.name, toolName, "failed"); throw new Error(msg.error?.message || `task ${toolName} failed`); }
+        if (msg.type === "result") { updateTask(this.name, toolName, "completed"); mirror("completed"); return msg.result?.content ?? msg.result; }
+        if (msg.type === "error") { updateTask(this.name, toolName, "failed"); mirror("failed"); throw new Error(msg.error?.message || `task ${toolName} failed`); }
         const status = msg.status?.status || msg.type;
         updateTask(this.name, toolName, status);
+        mirror(status);
         logEvent("info", `task ${this.name}/${toolName}: ${status}`);
       }
       return null;

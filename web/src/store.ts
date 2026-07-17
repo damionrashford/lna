@@ -15,6 +15,7 @@ export type Usage = { requests: number; input: number; output: number; total: nu
 export type TaskInfo = { server: string; tool: string; status: string; t: number };
 export type MachineInfo = { tier: string; note: string; examples: string[]; summary: string };
 export type VoiceState = { active: boolean; state: "idle" | "loading" | "listening" | "thinking" | "speaking" };
+export type PlanStep = { title: string; status: "pending" | "in_progress" | "completed" };
 
 export interface State {
   status: { state: string; text: string };
@@ -45,6 +46,7 @@ export interface State {
   canInstall: boolean;     // a beforeinstallprompt was captured (show an Install affordance)
   onboarding: boolean;     // show the first-run welcome (non-blocking)
   profileName: string;     // reactive mirror of the local profile name, for the greeting
+  plan: PlanStep[];        // the agent's live plan (from the update_plan tool)
 }
 
 let state: State = {
@@ -80,6 +82,7 @@ let state: State = {
   canInstall: false,
   onboarding: false,
   profileName: "",
+  plan: [],
 };
 
 const listeners = new Set<() => void>();
@@ -121,6 +124,7 @@ export function setIntake(text: string | null) { set({ intake: text }); }
 export function setCanInstall(v: boolean) { set({ canInstall: v }); }
 export function setOnboarding(v: boolean) { set({ onboarding: v }); }
 export function setProfileName(v: string) { set({ profileName: v }); }
+export function setPlan(v: PlanStep[]) { set({ plan: v }); }
 
 // upsert MCP task status (keyed by server+tool) for the debug panel's background-task view
 export function updateTask(server: string, tool: string, status: string) {

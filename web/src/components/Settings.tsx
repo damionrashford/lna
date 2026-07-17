@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore, S, set, setProfileName } from "../store";
-import { getProfile, saveProfile, type Tone } from "../lib/runtime/profile";
-import { enqueueTask } from "../lib/runtime/tasks";
+import { getProfile, saveProfile, type Tone } from "../lib/runtime/context/profile";
+import { enqueueTask } from "../lib/runtime/autonomy/tasks";
 import {
   createSession, switchSession, deleteSession, pullModel,
   addRepo, snapshotWorkspace, restoreSnapshot, deleteSnapshot,
@@ -191,7 +191,7 @@ export default function Settings() {
 
           <div className="field"><label>Autonomous mode</label>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.82rem", color: "var(--ink-mid)", cursor: "pointer" }}>
-              <input type="checkbox" checked={autonomous} onChange={async (e) => { const on = e.target.checked; setAutonomous(on); S.autonomous = on; const s = await import("../lib/runtime/scheduler"); on ? s.startScheduler() : s.stopScheduler(); }} /> Let AUTOMO work on queued tasks on its own
+              <input type="checkbox" checked={autonomous} onChange={async (e) => { const on = e.target.checked; setAutonomous(on); S.autonomous = on; const s = await import("../lib/runtime/autonomy/scheduler"); on ? s.startScheduler() : s.stopScheduler(); }} /> Let AUTOMO work on queued tasks on its own
             </label>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <input placeholder="queue a task for AUTOMO to do…" style={{ flex: 1 }} value={taskText} onChange={(e) => setTaskText(e.target.value)}

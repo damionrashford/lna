@@ -7,7 +7,7 @@ import {
   defineToolInputGuardrail, defineToolOutputGuardrail, ToolGuardrailFunctionOutputFactory,
   type InputGuardrail, type OutputGuardrail,
 } from "@openai/agents";
-import { S } from "../../store";
+import { S } from "../../../store";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Targeted, low-false-positive credential patterns.

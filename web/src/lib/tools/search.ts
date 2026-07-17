@@ -8,7 +8,7 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import { S } from "../../store";
-import { noSecretsToWeb, redactToolSecrets } from "../runtime/guardrails";
+import { noSecretsToWeb, redactToolSecrets } from "../runtime/context/guardrails";
 import { rerank } from "@automo/inference";
 import { logEvent } from "../../store";
 

@@ -11,10 +11,10 @@
 // so the browser page reaches the model on the machine.
 import { OpenAIResponsesModel, setDefaultModelProvider, setDefaultOpenAIClient, type Model, type ModelProvider } from "@openai/agents";
 import { OpenAI } from "openai";
-import { S } from "../../store";
+import { S } from "../../../store";
 import { providerFor } from "@automo/inference";
 import { BrowserModel } from "./browser-model";
-import { spaceFor } from "../net/index";
+import { spaceFor } from "../../net/index";
 
 // Name MUST contain "ChatCompletions" to trip the SDK's transport check.
 class ChatCompletionsResponsesModel extends OpenAIResponsesModel {}

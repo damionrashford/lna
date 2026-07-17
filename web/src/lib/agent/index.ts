@@ -80,7 +80,7 @@ export async function saveUiMessages(id: string, msgs: UIMessage[]) {
   set({ sessions }); await saveSessions();
 }
 export async function switchSession(id: string) {
-  set({ sessionId: id }); localStorage.setItem("automo.session", id); await resetSandbox();
+  set({ sessionId: id, plan: [] }); localStorage.setItem("automo.session", id); await resetSandbox();
 }
 export async function createSession() {
   const id = newSid();
@@ -156,13 +156,13 @@ export async function boot() {
   const { initPwa } = await import("../platform/pwa");
   setStatus("", "not connected");
   // local profile → show the warm first-run welcome once (non-blocking), mirror the name for the greeting
-  const { getProfile } = await import("../runtime/profile");
+  const { getProfile } = await import("../runtime/context/profile");
   const prof = getProfile();
   set({ onboarding: !prof.onboarded, profileName: prof.name });
   initWakeLock();
   initTabs();
   initPwa(); // Share Target / File Handlers / install prompt for the installed PWA
-  if (S.autonomous) { const { startScheduler } = await import("../runtime/scheduler"); startScheduler(); } // opt-in autonomous mode
+  if (S.autonomous) { const { startScheduler } = await import("../runtime/autonomy/scheduler"); startScheduler(); } // opt-in autonomous mode
   // detect the machine and recommend a model size (coarse browser APIs), then refine with the bridge's
   // exact RAM/VRAM/chip if it's running — WebGPU caps deviceMemory at 8 and hides VRAM, so a 64GB box
   // reads as 8GB until the bridge reports real numbers. Runs at idle (Background Tasks API) so it never

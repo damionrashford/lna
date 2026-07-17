@@ -72,3 +72,22 @@ registerInPageServer("browser", async (io) => {
   );
   await server.connect(new (StdioServerTransport as any)(io.stdin, io.stdout));
 });
+
+// ---- in-page server: AUTOMO's own autonomous task queue, surfaced over MCP ----
+// Projects the durable autonomy queue (runtime/autonomy/tasks) into MCP Tasks (taskId/status/ttl/…) so any
+// MCP client — including AUTOMO's agent itself — can inspect and cancel its autonomous work. list/get use
+// the MCP-shaped projection; cancel drives the real queue. Status vocabulary matches the MCP Tasks spec.
+registerInPageServer("automo-tasks", async (io) => {
+  const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+  const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+  const { z } = await import("zod");
+  const { listMcpTasks, getMcpTask, cancelTask, toMcpTask } = await import("../runtime/autonomy/tasks");
+  const server = new McpServer({ name: "automo-tasks", version: "1.0.0" });
+  server.registerTool("list_tasks", { description: "List AUTOMO's autonomous tasks as MCP Tasks (taskId, status, ttl, timestamps).", inputSchema: {} },
+    async () => txt(JSON.stringify(await listMcpTasks(), null, 2)));
+  server.registerTool("get_task", { description: "Get one autonomous task by id as an MCP Task.", inputSchema: { taskId: z.string() } },
+    async ({ taskId }: { taskId: string }) => { const t = await getMcpTask(taskId); return txt(t ? JSON.stringify(t, null, 2) : `no task ${taskId}`); });
+  server.registerTool("cancel_task", { description: "Cancel a non-terminal autonomous task by id.", inputSchema: { taskId: z.string(), reason: z.string().optional() } },
+    async ({ taskId, reason }: { taskId: string; reason?: string }) => { const t = await cancelTask(taskId, reason); return txt(t ? JSON.stringify(toMcpTask(t), null, 2) : `no task ${taskId}`); });
+  await server.connect(new (StdioServerTransport as any)(io.stdin, io.stdout));
+});

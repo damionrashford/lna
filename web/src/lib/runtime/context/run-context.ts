@@ -10,9 +10,9 @@
 //      may hold LIVE HANDLES (the sandbox session) but MUST NOT hold SECRETS — the bridge token stays
 //      in settings/localStorage and is used only at connect time, never parked in context.
 import type { SandboxSession } from "@openai/agents/sandbox";
-import { S, logEvent } from "../../store";
-import { getFsRoot } from "../storage/opfs";
-import { connectedMcpLabels } from "../mcp/index";
+import { S, logEvent } from "../../../store";
+import { getFsRoot } from "../../storage/opfs";
+import { connectedMcpLabels } from "../../mcp/index";
 
 export interface AutomoContext {
   /** live sandbox session for this run (null until the bridge connects); used by tools like web_search */
@@ -56,8 +56,8 @@ export function buildContext(session: SandboxSession<any> | null, sessionId: str
     env: {
       folder: getFsRoot()?.name ?? null,
       // sorted for byte-stable instructions: a deterministic prefix keeps the model's prompt cache
-      // warm across turns (the trick both openclaw and hermes-agent lean on). startedAt is date-only
-      // for the same reason — it stays identical all day.
+      // warm across turns (a standard KV-cache-stability technique). startedAt is date-only for the same
+      // reason — it stays identical all day.
       mcpServers: connectedMcpLabels().sort(),
       startedAt: new Date().toISOString().slice(0, 10),
     },
